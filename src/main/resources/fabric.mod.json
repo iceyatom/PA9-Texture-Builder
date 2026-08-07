@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "texturebuilder",
+  "version": "${version}",
+  "name": "PA9 TextureBuilder",
+  "description": "Weighted-random hotbar texturing for manual building. Silently switches the active hotbar slot to a weighted random pick from a configurable pool immediately before each block placement, then restores it.",
+  "authors": [
+    "PersonalAtom9"
+  ],
+  "contact": {
+    "homepage": "https://www.youtube.com/@PersonalAtom9",
+    "sources": ""
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.yourname.texturebuilder.TextureBuilderClient"
+    ],
+    "modmenu": [
+      "com.yourname.texturebuilder.compat.modmenu.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "texturebuilder.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": ">=0.155.2",
+    "minecraft": "~26.2",
+    "java": ">=25"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

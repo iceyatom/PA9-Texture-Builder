@@ -1,0 +1,107 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven {
+		name = 'Terraformers'
+		url = 'https://maven.terraformersmc.com/releases/'
+		content {
+			includeGroup 'com.terraformersmc'
+		}
+	}
+	mavenCentral()
+}
+
+loom {
+	// SRS §3.1: everything in this mod is client-side, so a dedicated `client`
+	// source set holds all production code (mirrors ShulkerPickBlock/ContainerSort).
+	splitEnvironmentSourceSets()
+
+	mods {
+		"texturebuilder" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+
+	// SRS §3.2 / §7.4: only widen access where a compile-time error is actually hit.
+	// None encountered with the current design, so this stays commented out.
+	// accessWidenerPath = file("src/main/resources/texturebuilder.accesswidener")
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+	// No `mappings` dependency: 26.x Minecraft jars ship with real (Mojmap) names already,
+	// and Fabric's intermediary/Yarn pipeline stops at 1.21.11 — see CLAUDE.md.
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Mod Menu is compile-only (FR-22): it supplies the `ModMenuApi`/`ConfigScreenFactory`
+	// interfaces implemented by `compat.modmenu.ModMenuIntegration`, but is NOT required at
+	// runtime. Loader only instantiates the `modmenu` entrypoint when Mod Menu is installed,
+	// so that class is never loaded otherwise and no NoClassDefFoundError is possible.
+	compileOnly("com.terraformersmc:modmenu:${project.mod_menu_version}") { transitive = false }
+}
+
+java {
+	// MC 26.x requires Java 25 for both compilation and the Gradle toolchain (SRS §2).
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	it.options.encoding = 'UTF-8'
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+// Matches the naming convention used by the other mods in this modpack, e.g.
+// "shulker-pick-block - 26.2 - 1.1.0.jar": "<name> - <minecraft_version> - <mod_version>".
+def outputBaseName = "${project.archives_base_name} - ${project.minecraft_version} - ${project.mod_version}"
+
+jar {
+	archiveFileName = "${outputBaseName}.jar"
+
+	from("LICENSE") {
+		rename { "${it}_${project.archives_base_name}" }
+	}
+}
+
+sourcesJar {
+	archiveFileName = "${outputBaseName}-sources.jar"
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	repositories {
+	}
+}

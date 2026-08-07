@@ -1,0 +1,24 @@
+{
+  "key.texturebuilder.toggle": "Toggle Texture Builder",
+
+  "text.texturebuilder.button": "TB",
+  "text.texturebuilder.button.tooltip": "Open PA9 TextureBuilder settings",
+
+  "text.texturebuilder.config.title": "PA9 TextureBuilder — Hotbar Pool",
+  "text.texturebuilder.config.header.slot": "Slot",
+  "text.texturebuilder.config.header.item": "Item",
+  "text.texturebuilder.config.header.included": "Included",
+  "text.texturebuilder.config.header.weight": "Weight",
+  "text.texturebuilder.config.header.effective": "Eff. %",
+  "text.texturebuilder.config.slot": "Slot %s",
+  "text.texturebuilder.config.included": "Included",
+  "text.texturebuilder.config.weight": "Weight",
+  "text.texturebuilder.config.empty": "(empty)",
+  "text.texturebuilder.config.total": "Included weight total: %s",
+  "text.texturebuilder.config.total.normalized": " (normalizes to 100% at runtime)",
+
+  "message.texturebuilder.on": "Texture Builder: ON",
+  "message.texturebuilder.off": "Texture Builder: OFF",
+  "message.texturebuilder.no_more": "No more %s found",
+  "message.texturebuilder.failed": "Texture Builder hit an error and is disabled for this session (see log)"
+}
