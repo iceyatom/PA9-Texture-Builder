@@ -39,7 +39,10 @@ source refer to that document.
   Drag a slider to adjust, or click it and use the arrow keys for an exact value. Weights don't
   have to sum to 100 — selection normalizes proportionally, and the "Eff. %" column shows each
   slot's real resulting share; the total line turns red as a reminder.
-- **Build** — with the mod ON, place blocks normally. Only the 9 hotbar slots are ever used.
+- **Build** — with the mod ON, place blocks normally. The hotbar selection follows each placement,
+  so the highlighted slot always shows which block just went down. (Set
+  `restore_slot_after_placement = true` in the config if you'd rather the selection stay put on the
+  slot you chose manually.) Only the 9 hotbar slots are ever used.
   When a pooled slot runs out, the mod fires a single vanilla pick-block at the block you just
   placed to restock the slot (instant refill in creative; pulled from your main inventory in
   survival). If none are found anywhere, a brief "No more … found" message appears and the slot

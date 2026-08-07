@@ -86,7 +86,8 @@ Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.l
 - `placement/PlacementRandomizer` — the core. `beforePlacement` (mixin HEAD): only acts when ON,
   main hand, and the held item is empty-or-BlockItem (tools/food stay vanilla); draws via helper,
   switches slot + sends `ServerboundSetCarriedItemPacket` (PKT-01). `afterPlacement` (mixin TAIL):
-  restock if the pick emptied its slot, then restore in a `finally` (FR-12, NFR-03/06). Restock
+  restock if the pick emptied its slot, then restore in a `finally` **only if
+  `restore_slot_after_placement`**. Restock
   (FR-13): creative = local refill + `handleCreativeModeItemAdd` (FR-18); survival = vanilla
   `handlePickItemFromBlock` at the placed pos (resolved as face-adjacent, else clicked pos for
   replaceables), fired **only when a match exists in main inventory 9–35** (FR-19) and **before**
@@ -176,10 +177,18 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
    above the hotbar, no persistent overlay.
 4. **FR-07 "live preview" is the item name, not an icon** — no verified item-icon draw call in the
    26.2 screen render model; name refreshes every tick.
-5. **Held-item guard** — the randomizer only engages when the held item is empty or a `BlockItem`,
+5. **Selection is NOT restored after placement (changed 2026-08-07 at the user's request).**
+   SRS §1/FR-12/NFR-06/TC-04 specified switch-then-restore so the visible hotbar never moved; in
+   practice that made it ambiguous which block was being placed, since blocks came from slots other
+   than the highlighted one. The chosen slot now stays selected. SRS §1 explicitly labelled the old
+   behaviour "a design assumption made for v1 [that] can be revisited if undesired", so this is a
+   sanctioned revision, not a spec violation. **`restore_slot_after_placement = true` restores the
+   original behaviour** (and with it FR-12/NFR-06/TC-04 as literally written). Side benefit: no
+   restore packet can race the FR-13 restock pick, since the depleted slot simply stays selected.
+6. **Held-item guard** — the randomizer only engages when the held item is empty or a `BlockItem`,
    so right-clicking with tools/food/buckets stays fully vanilla even while ON (keeps NFR-05 safe
    in mixed play; the SRS is silent on non-block right-clicks).
-6. **Survival restock uses vanilla `handlePickItemFromBlock`** at the just-placed position —
+7. **Survival restock uses vanilla `handlePickItemFromBlock`** at the just-placed position —
    server-authoritative on vanilla servers, satisfying PKT-03/05 with zero custom logic. Fired
    before the slot restore so the server moves the match into the depleted (still selected) slot.
 

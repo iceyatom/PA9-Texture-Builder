@@ -57,6 +57,14 @@ public final class ModConfig {
     public boolean[] included = defaultIncluded();
     /** Per-slot raw weight (FR-07). Normalized proportionally at selection time (FR-11). */
     public int[] weights = defaultWeights();
+    /**
+     * Restore the player's previously-selected hotbar slot after each placement — the original
+     * SRS §1 / FR-12 / NFR-06 behaviour. Defaults to {@code false} so the chosen slot stays
+     * selected and the hotbar visibly shows which block was just placed (SRS §1 explicitly allows
+     * this assumption to be revisited). Set {@code true} to keep the selection frozen between
+     * placements instead.
+     */
+    public boolean restoreSlotAfterPlacement = false;
     /** Show normalized effective percentages, not just raw weights, in the config screen (FR-09). */
     public boolean autoNormalizeDisplay = true;
     /** How long the disappearing "no more blocks found" message stays visible (FR-15). Range 500–5000. */
@@ -146,6 +154,7 @@ public final class ModConfig {
                 case "enabled" -> cfg.enabled = Boolean.parseBoolean(value);
                 case "toggle_keybind" -> cfg.toggleKeybind = value.isEmpty() ? "unbound" : value;
                 case "slots" -> parseSlots(cfg, value);
+                case "restore_slot_after_placement" -> cfg.restoreSlotAfterPlacement = Boolean.parseBoolean(value);
                 case "auto_normalize_display" -> cfg.autoNormalizeDisplay = Boolean.parseBoolean(value);
                 case "restock_message_duration_ms" -> cfg.restockMessageDurationMs = Integer.parseInt(value);
                 case "debug_logging" -> cfg.debugLogging = Boolean.parseBoolean(value);
@@ -214,6 +223,12 @@ public final class ModConfig {
                 # Each weight is a percentage in the range 0-100 (values outside are clamped).
                 %s
 
+                # Restore your previously-selected hotbar slot after each placement.
+                # false (default): the randomly-chosen slot stays selected, so the hotbar always
+                #   shows which block was just placed.
+                # true: the visible selection stays frozen on the slot you picked manually.
+                restore_slot_after_placement = %s
+
                 # Show normalized effective percentages (not just raw weights) in the config screen.
                 auto_normalize_display = %s
 
@@ -222,8 +237,8 @@ public final class ModConfig {
 
                 # Write verbose slot-selection and restock diagnostics to the Fabric log. Development use only.
                 debug_logging = %s
-                """.formatted(enabled, toggleKeybind, slots, autoNormalizeDisplay,
-                restockMessageDurationMs, debugLogging);
+                """.formatted(enabled, toggleKeybind, slots, restoreSlotAfterPlacement,
+                autoNormalizeDisplay, restockMessageDurationMs, debugLogging);
         try {
             Files.createDirectories(configPath().getParent());
             Files.writeString(configPath(), content, StandardCharsets.UTF_8);
@@ -247,6 +262,7 @@ public final class ModConfig {
             }
         }
         lines.add("included slots (slot:weight) = " + (pool.isEmpty() ? "none" : pool));
+        lines.add("restore_slot_after_placement = " + restoreSlotAfterPlacement);
         lines.add("auto_normalize_display = " + autoNormalizeDisplay);
         lines.add("restock_message_duration_ms = " + restockMessageDurationMs);
         lines.add("debug_logging = " + debugLogging);

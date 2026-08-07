@@ -26,19 +26,32 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
- * The switch-and-restore engine behind each placement (FR-11..FR-19, SRS §1 design note).
+ * The slot-switching engine behind each placement (FR-11..FR-19, SRS §1 design note).
  *
  * <p>{@link #beforePlacement} runs at the HEAD of {@code MultiPlayerGameMode.useItemOn}: it draws a
  * weighted random slot from the configured pool, records the player's currently-selected slot, and
  * switches to the pick — sending the same {@code ServerboundSetCarriedItemPacket} pressing a number
  * key would (PKT-01). Vanilla placement then proceeds completely unmodified (PKT-02).
- * {@link #afterPlacement} runs at TAIL of the same call: it fires the restock attempt if the pick
- * emptied the slot (FR-13), then restores the originally-selected slot — all within the same client
- * tick, so nothing ever observes an intermediate hotbar state between placements (FR-12, NFR-03/06).
+ * {@link #afterPlacement} runs at TAIL of the same call and fires the restock attempt if the pick
+ * emptied the slot (FR-13).
+ *
+ * <h2>Whether the selection is restored afterwards</h2>
+ * SRS §1 specified switching only "for the instant of each placement" and restoring the previous
+ * slot, so the visible hotbar selection stayed put between placements (FR-12, NFR-06, TC-04) — but
+ * it flagged that as "a design assumption made for v1 [that] can be revisited if undesired".
+ * <b>Revisited on 2026-08-07 at the user's request: the mod now leaves the chosen slot selected</b>,
+ * because keeping the selection frozen while blocks came out of other slots made it visually
+ * ambiguous which block was actually being placed. The hotbar indicator now always shows the slot
+ * the last block came from. Setting {@code restore_slot_after_placement = true} restores the
+ * original SRS §1 behaviour.
+ *
+ * <p>Not restoring also removes the ordering hazard the restore created: the pick-block restock
+ * (FR-13) targets the depleted slot, which simply stays selected, so there is no restore packet
+ * racing the server's pick.
  *
  * <p>Every entry point is wrapped so that an unexpected exception disables the feature for the rest
- * of the session instead of leaving placement in an inconsistent state (NFR-04); the restore step
- * runs in a {@code finally} so the player's slot comes back even on the failure path.
+ * of the session instead of leaving placement in an inconsistent state (NFR-04); when restoring is
+ * enabled that step runs in a {@code finally} so the player's slot comes back even on failure.
  */
 public final class PlacementRandomizer {
 
@@ -97,7 +110,8 @@ public final class PlacementRandomizer {
 
     /**
      * TAIL of the same {@code useItemOn} call: restock if the pick just emptied its slot
-     * (FR-13..FR-15, FR-18/FR-19), then restore the originally-held slot (FR-12).
+     * (FR-13..FR-15, FR-18/FR-19), then restore the originally-held slot only if
+     * {@code restore_slot_after_placement} is enabled (see {@link #beforePlacement}).
      */
     public static void afterPlacement() {
         Pending p = pending;
@@ -118,9 +132,12 @@ public final class PlacementRandomizer {
         } catch (RuntimeException e) {
             TextureBuilderClient.failSession(e);
         } finally {
-            // Always restore, even if the restock attempt failed (NFR-04/NFR-06). Sent after the
-            // restock pick so a survival server processes the pick against the depleted slot.
-            if (inventory.getSelectedSlot() != p.originalSlot()) {
+            // Only restore when the player has opted back into the original SRS §1 behaviour.
+            // When restoring, this runs even if the restock attempt threw (NFR-04) and is sent
+            // after the restock pick so a survival server processes the pick against the
+            // depleted, still-selected slot.
+            if (ModConfig.get().restoreSlotAfterPlacement
+                    && inventory.getSelectedSlot() != p.originalSlot()) {
                 switchSlot(client, inventory, p.originalSlot());
             }
         }
