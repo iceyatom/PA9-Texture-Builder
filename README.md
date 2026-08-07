@@ -33,8 +33,8 @@ source refer to that document.
 - **Toggle** — bind "Toggle Texture Builder" in Options → Controls (unbound by default), or set
   `toggle_keybind` in the config. Toggling shows a brief "Texture Builder: ON/OFF" message above
   the hotbar. The state is per-session; it only starts ON if `enabled = true` in the config.
-- **Configure the pool** — open your inventory and click the small **TB** button (top-right of
-  the inventory panel), or run `/texturebuilder config`, or use Mod Menu's gear. Each hotbar slot
+- **Configure the pool** — open your inventory and click the small **TB** button (just below the
+  crafting output slot), or run `/texturebuilder config`, or use Mod Menu's gear. Each hotbar slot
   row shows the item currently in it (live), an Included toggle, and a weight. Weights don't have
   to sum to 100 — selection normalizes proportionally; the total line turns red as a reminder.
 - **Build** — with the mod ON, place blocks normally. Only the 9 hotbar slots are ever used.

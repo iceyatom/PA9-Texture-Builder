@@ -3,7 +3,7 @@
 	"package": "com.yourname.texturebuilder.mixin.client",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"AbstractContainerScreenMixin",
+		"InventoryScreenMixin",
 		"MultiPlayerGameModeMixin"
 	],
 	"injectors": {

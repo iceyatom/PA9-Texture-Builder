@@ -43,6 +43,40 @@ and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
   - `KeyMapping.Category` constants: MOVEMENT/MISC/MULTIPLAYER/GAMEPLAY/INVENTORY/CREATIVE/
     SPECTATOR/DEBUG. `KeyMapping.setKey`, static `resetMapping()`, `InputConstants.getKey(String)`.
 
+### ⚠️ Mixin lesson: `@Shadow` does NOT resolve inherited FIELDS (crash, 2026-08-07)
+Shipping a mixin on `InventoryScreen` that `@Shadow`ed `leftPos`/`topPos`/`imageWidth` crashed the
+game at class-load (exit code 1) with:
+```
+InvalidMixinException: @Shadow field leftPos was not located in the target class
+  net.minecraft.client.gui.screens.inventory.InventoryScreen
+  at MixinPreProcessorStandard.attachFields(...)
+```
+Those fields are declared on `AbstractContainerScreen`, not on `InventoryScreen`.
+**`@Shadow` on a field requires the field to be declared on the target class itself — Mixin does
+not walk the superclass hierarchy for fields.** (The earlier revision "worked" only because it
+targeted `AbstractContainerScreen`, where they *are* declared.)
+**Fix:** declare the superclass on the mixin instead and drop `@Shadow` entirely —
+`@Mixin(InventoryScreen.class) abstract class X extends AbstractContainerScreen<InventoryMenu>` —
+then the fields are genuinely inherited, javac resolves them, and the JVM looks them up normally.
+The mixin's declared superclass only has to be *somewhere* in the target's hierarchy, and this is
+safe as long as the mixin never calls `super.*`. A dummy constructor matching the superclass is
+needed for javac; Mixin discards mixin constructors.
+**Note:** a clean `gradlew build` does NOT catch this — mixin targets are resolved at class-load,
+not compile time. Verify by launching (see "How to verify a mixin actually applies" below).
+
+### How to verify a mixin actually applies (without playing the game)
+`gradlew build` succeeding proves nothing about mixin binding. `gradlew runClient` only loads a
+target class when something touches it (e.g. `InventoryScreen` loads when the inventory opens). To
+force it, temporarily add to `TextureBuilderClient.onInitializeClient`:
+```java
+try { Class.forName("net.minecraft.client.gui.screens.inventory.InventoryScreen"); }
+catch (Throwable t) { LOGGER.error("load FAILED", t); }
+```
+then `gradlew runClient` and grep `run/logs/latest.log` for `Mixin apply for mod texturebuilder`
+/ `InvalidMixinException`. Remove the temp block before the release build.
+Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.log`, plus rotated
+`*.log.gz`); an early mixin crash produces a suspiciously small (~4KB) gz log.
+
 ## Architecture (all under `src/client/java/com/yourname/texturebuilder/`)
 - `TextureBuilder` — mod id / name / logger constants, `HOTBAR_SIZE`.
 - `TextureBuilderClient` — `ClientModInitializer`; loads config, session ON/OFF state (FR-03:
@@ -72,12 +106,38 @@ and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
   "normalizes at runtime" (FR-09, never blocks closing). Edits hit the live config immediately;
   TOML written in `onClose()` by every route (FR-10). Parent screen restored on close (FR-06).
 - `mixin/client/MultiPlayerGameModeMixin` — `useItemOn` HEAD+TAIL, non-cancelling (PKT-02).
-- `mixin/client/AbstractContainerScreenMixin` — inventory **TB** button (FR-05). Targets
-  `AbstractContainerScreen.init` TAIL with `instanceof InventoryScreen` guard, because the SRS's
-  suggested `InventoryScreen.init` doesn't exist in 26.2. **ContainerSort injects the same method
-  (priority 1100)** — both are additive TAILs, coexistence is safe; this one is priority 1200 for
-  deterministic order. NFR-09's "no shared target methods" is thus violated in letter (impossible
-  in 26.2) but not in spirit; documented here per the SRS risk table.
+- `mixin/client/InventoryScreenMixin` — inventory **TB** button (FR-05). Targets **`InventoryScreen`**
+  (`init`, `onRecipeBookButtonClick`, `containerTick`, all TAIL), exactly as SRS §7.2 prescribes.
+  **Correction (2026-08-06):** an earlier revision targeted `AbstractContainerScreen.init` on the
+  belief that concrete screens no longer declare `init()` in 26.2. That is true of
+  `ContainerScreen`/`ShulkerBoxScreen` (ContainerSort's targets) but **NOT of `InventoryScreen`,
+  which does declare `init()`** — verified by `javap`. Targeting `InventoryScreen` directly is
+  strictly better: NFR-11 satisfied, no `instanceof` guard needed, and **no shared target method
+  with ContainerSort, so NFR-09 is now satisfied in letter as well as spirit.**
+  **Button placement** (moved 2026-08-06 at the user's request, from the top-right corner to the
+  empty panel space beneath the crafting output): 24x12 at `(leftPos + imageWidth - 30, topPos + 64)`
+  → GUI-relative x 146-170, y 64-76. Verified clear against the 26.2 bytecode: result slot
+  `(154, 28)` 16x16 [`InventoryMenu.addResultSlot`], recipe book button `(leftPos + 104, height/2 - 22)`
+  20x18 = y 61-79 [`InventoryScreen.getRecipeBookButtonPosition`], shield slot `(77, 62)`, player
+  inventory rows from y 84. `InventoryScreen.isBiggerResultSlot()` returns **false**, so the result
+  slot is never enlarged here.
+  **⚠️ `leftPos` moves — the position MUST be re-asserted, not set once.** Opening the recipe book
+  shifts the panel right, and `leftPos` is reassigned in exactly two places (both verified in
+  bytecode), neither of which an `AbstractContainerScreen.init` TAIL hook can see:
+  1. `AbstractRecipeBookScreen.init()` calls `super.init()` **first**, *then* assigns
+     `leftPos = recipeBookComponent.updateScreenPosition(...)` and calls `initButton()`. This was
+     the reported bug — the button rendered ~72px left of target (over the player model) whenever
+     the recipe book was open. Injecting at `InventoryScreen.init` TAIL fixes it because
+     `InventoryScreen.init()`'s last `return` (offset 74) is *after* its `super.init()` call.
+  2. The recipe book toggle button's own `onPress` lambda re-assigns `leftPos`, repositions its own
+     button, then calls `onRecipeBookButtonClick()` — it **does not re-run `init()`**, so a
+     create-time-only placement goes stale on every toggle. Hence the `onRecipeBookButtonClick`
+     TAIL hook (`InventoryScreen` overrides it; the override just sets `buttonClicked = true`).
+  `containerTick` TAIL is a cheap per-tick safety net for any path not enumerated above.
+  **Note:** `InventoryScreen.init()` swaps creative players to `CreativeModeInventoryScreen` and
+  returns early, so **the TB button does not appear in the creative inventory** — creative users
+  reach the config screen via `/texturebuilder config` or Mod Menu. FR-05 says "the vanilla player
+  inventory screen", so this is spec-compliant, but see TODO 2.
 - `hud/TextureBuilderHud` — self-expiring above-hotbar text (toggle confirmations FR-02, restock
   misses FR-15); duration = `restock_message_duration_ms`.
 - `command/TextureBuilderCommands` — `/texturebuilder config|reload|status` via
@@ -95,8 +155,8 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
 
 ## Design decisions / deviations from the SRS (all deliberate)
 1. **Mojmap, not Yarn** — Yarn doesn't exist for 26.x (see findings).
-2. **Inventory button mixin targets `AbstractContainerScreen`** — `InventoryScreen.init` doesn't
-   exist in 26.2 (see mixin notes).
+2. ~~**Inventory button mixin targets `AbstractContainerScreen`**~~ — retracted 2026-08-06; it does
+   target `InventoryScreen` per SRS §7.2 after all (see mixin notes).
 3. **"Action-bar" messages render via a HUD element** — `displayClientMessage` is absent in 26.x;
    this is the verified pattern from ShulkerPickBlock. Same visual result: brief, disappearing,
    above the hotbar, no persistent overlay.
@@ -122,5 +182,9 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
 
 ## TODO / next steps
 1. Launch a 26.2 dev client (`gradlew runClient`) or install the jar; walk TC-01..TC-12.
-2. If the TB button crowds other inventory mods, make its corner configurable (SRS §12 risk).
-3. Consider a repeat-suppression window for the FR-15 message (SRS §12 "future version").
+2. **Creative-mode config access** — the TB button can't appear in creative (see mixin note).
+   Since creative is a primary use case for this mod (TC-03 assumes unlimited creative stacks),
+   consider a second mixin adding the same button to `CreativeModeInventoryScreen`'s inventory tab.
+   Not done yet: it's beyond FR-05's wording and needs the user's call.
+3. If the TB button crowds other inventory mods, make its corner configurable (SRS §12 risk).
+4. Consider a repeat-suppression window for the FR-15 message (SRS §12 "future version").
