@@ -32,6 +32,16 @@ public final class ModConfig {
     public static final int MESSAGE_DURATION_MIN_MS = 500;
     public static final int MESSAGE_DURATION_MAX_MS = 5000;
 
+    /**
+     * Per-slot weight bounds. The SRS calls these "weight (percentage)" values (FR-07) and frames
+     * the running total around 100 (FR-09), so a slot's weight is capped at 100 — which is also
+     * what makes the config screen's weight sliders a bounded, 1-unit-per-pixel control. Only the
+     * <em>ratios</em> between weights matter, because selection normalizes proportionally at
+     * runtime (FR-11), so the cap costs no expressiveness for any realistic blend.
+     */
+    public static final int WEIGHT_MIN = 0;
+    public static final int WEIGHT_MAX = 100;
+
     private static ModConfig instance = new ModConfig();
 
     /** Master toggle at launch — mirrors the in-game hotkey state (FR-03). */
@@ -108,7 +118,7 @@ public final class ModConfig {
         cfg.restockMessageDurationMs = Math.max(MESSAGE_DURATION_MIN_MS,
                 Math.min(MESSAGE_DURATION_MAX_MS, cfg.restockMessageDurationMs));
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
-            cfg.weights[i] = Math.max(0, cfg.weights[i]);
+            cfg.weights[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, cfg.weights[i]));
         }
         instance = cfg;
         // Always rewrite so new options gain their documented defaults after an update.
@@ -201,6 +211,7 @@ public final class ModConfig {
                 # One entry per hotbar slot: {index, included, weight}. Only included slots
                 # participate in weighted random selection; weights are normalized
                 # proportionally at runtime, so they do not need to sum to 100.
+                # Each weight is a percentage in the range 0-100 (values outside are clamped).
                 %s
 
                 # Show normalized effective percentages (not just raw weights) in the config screen.

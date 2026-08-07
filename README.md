@@ -35,8 +35,10 @@ source refer to that document.
   the hotbar. The state is per-session; it only starts ON if `enabled = true` in the config.
 - **Configure the pool** — open your inventory and click the small **TB** button (just below the
   crafting output slot), or run `/texturebuilder config`, or use Mod Menu's gear. Each hotbar slot
-  row shows the item currently in it (live), an Included toggle, and a weight. Weights don't have
-  to sum to 100 — selection normalizes proportionally; the total line turns red as a reminder.
+  row shows the item currently in it (live), an Included toggle, and a **weight slider** (0–100).
+  Drag a slider to adjust, or click it and use the arrow keys for an exact value. Weights don't
+  have to sum to 100 — selection normalizes proportionally, and the "Eff. %" column shows each
+  slot's real resulting share; the total line turns red as a reminder.
 - **Build** — with the mod ON, place blocks normally. Only the 9 hotbar slots are ever used.
   When a pooled slot runs out, the mod fires a single vanilla pick-block at the block you just
   placed to restock the slot (instant refill in creative; pulled from your main inventory in

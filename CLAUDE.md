@@ -101,10 +101,24 @@ Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.l
   shape). Clamps duration 500–5000ms. Reload via `/texturebuilder reload` (FR-21).
 - `gui/TextureBuilderConfigScreen` — vanilla-widgets-only (HeaderAndFooterLayout + GridLayout);
   9 rows: slot label / live item **name** (refreshed in `tick()`; `GuiGraphicsExtractor` has no
-  simple item-icon call, so FR-07's "preview" is the name) / Included CycleButton / weight EditBox
-  / effective-% column (`auto_normalize_display`). Total line green at 100, else red +
+  simple item-icon call, so FR-07's "preview" is the name) / Included CycleButton / **weight
+  slider** / effective-% column (`auto_normalize_display`). Total line green at 100, else red +
   "normalizes at runtime" (FR-09, never blocks closing). Edits hit the live config immediately;
   TOML written in `onClose()` by every route (FR-10). Parent screen restored on close (FR-06).
+  **Weight sliders (changed 2026-08-07 at the user's request, from `EditBox` text entry):**
+  `WeightSlider extends AbstractSliderButton` (inner class), mapping the slider's 0.0-1.0 `value`
+  onto `ModConfig.WEIGHT_MIN..WEIGHT_MAX` (0-100). This required **bounding the weight range**,
+  which the old free-text field did not have — weights are now clamped to 0-100 in
+  `ModConfig.load()` too. Spec-aligned: FR-07 calls them "weight (percentage)" and FR-09 frames the
+  total around 100; only *ratios* matter (FR-11 normalizes), so a 100:1 ceiling costs nothing real.
+  `applyValue()` writes through to the live config and calls `refreshDerived()`, because changing
+  one slot's weight changes every other slot's normalized share. Column widths were rebalanced to
+  294px + 8px spacing = **302px, deliberately under the 320px minimum scaled GUI width** Minecraft
+  guarantees, so the row cannot overflow; the 100px weight column makes the slider ~1 unit/pixel.
+  `refreshDerived()`/`refreshItemNames()` are null-guarded since sliders are constructed before the
+  label widgets they update. 26.2 API confirmed by `javap`: `AbstractSliderButton(int,int,int,int,
+  Component,double)`, `protected double value`, abstract `updateMessage()`/`applyValue()`, and
+  `keyPressed` arrow-key stepping once Enter/Space arms `canChangeValue`.
 - `mixin/client/MultiPlayerGameModeMixin` — `useItemOn` HEAD+TAIL, non-cancelling (PKT-02).
 - `mixin/client/InventoryScreenMixin` — inventory **TB** button (FR-05). Targets **`InventoryScreen`**
   (`init`, `onRecipeBookButtonClick`, `containerTick`, all TAIL), exactly as SRS §7.2 prescribes.

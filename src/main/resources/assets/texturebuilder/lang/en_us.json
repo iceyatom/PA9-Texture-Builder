@@ -13,6 +13,7 @@
   "text.texturebuilder.config.slot": "Slot %s",
   "text.texturebuilder.config.included": "Included",
   "text.texturebuilder.config.weight": "Weight",
+  "text.texturebuilder.config.weight.tooltip": "Relative share of placements for this slot (0-100). Drag to adjust, or select the slider and use the arrow keys for exact values. Weights are normalized against the other included slots, so they need not add up to 100.",
   "text.texturebuilder.config.empty": "(empty)",
   "text.texturebuilder.config.total": "Included weight total: %s",
   "text.texturebuilder.config.total.normalized": " (normalizes to 100% at runtime)",

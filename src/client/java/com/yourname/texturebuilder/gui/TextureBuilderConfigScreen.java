@@ -9,24 +9,26 @@ import com.yourname.texturebuilder.util.TextureBuilderHelper;
 import com.yourname.texturebuilder.util.TextureBuilderHelper.SlotEntry;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 /**
  * The PA9 TextureBuilder configuration screen (FR-06..FR-10, SRS §7.3): one row per hotbar slot
- * with a live preview of the item currently in that slot, an include/exclude toggle, and an
- * editable weight field, plus the running weight total (flagged red when it isn't 100 — the screen
- * can still be closed regardless, since selection normalizes proportionally at runtime, FR-09).
+ * with a live preview of the item currently in that slot, an include/exclude toggle, and a weight
+ * slider, plus the running weight total (flagged red when it isn't 100 — the screen can still be
+ * closed regardless, since selection normalizes proportionally at runtime, FR-09).
  *
  * <p>Built from vanilla widgets only — no Cloth Config / YACL — mirroring the author's other 26.2
  * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick:
@@ -40,11 +42,14 @@ import net.minecraft.world.item.ItemStack;
 public class TextureBuilderConfigScreen extends Screen {
 
     private static final int ROW_HEIGHT = 16;
-    private static final int COL_SLOT = 34;
-    private static final int COL_ITEM = 112;
-    private static final int COL_INCLUDE = 58;
-    private static final int COL_WEIGHT = 44;
-    private static final int COL_EFFECTIVE = 44;
+    // Column widths total 294px + 8px of grid spacing = 302px, which still fits the 320px minimum
+    // scaled GUI width Minecraft guarantees. The weight column is 100px so the slider maps almost
+    // exactly one pixel per weight unit across its 0-100 range.
+    private static final int COL_SLOT = 30;
+    private static final int COL_ITEM = 96;
+    private static final int COL_INCLUDE = 34;
+    private static final int COL_WEIGHT = 100;
+    private static final int COL_EFFECTIVE = 34;
 
     private final Screen parent;
 
@@ -95,22 +100,7 @@ public class TextureBuilderConfigScreen extends Screen {
                                 refreshDerived();
                             }));
 
-            EditBox weightBox = new EditBox(this.font, 0, 0, COL_WEIGHT, ROW_HEIGHT,
-                    Component.translatable("text.texturebuilder.config.weight"));
-            weightBox.setMaxLength(4);
-            weightBox.setValue(Integer.toString(config.weights[slot]));
-            // 26.2 removed EditBox.setFilter, so non-digits are stripped in the responder
-            // instead (the re-entrant setValue call settles immediately once the text is clean).
-            weightBox.setResponder(s -> {
-                String digits = s.replaceAll("\\D", "");
-                if (!digits.equals(s)) {
-                    weightBox.setValue(digits);
-                    return;
-                }
-                config.weights[slot] = digits.isEmpty() ? 0 : Integer.parseInt(digits); // FR-10
-                refreshDerived();
-            });
-            rows.addChild(weightBox);
+            rows.addChild(new WeightSlider(slot, config.weights[slot]));
 
             effectivePercents[i] = new StringWidget(COL_EFFECTIVE, ROW_HEIGHT, Component.empty(), this.font);
             rows.addChild(effectivePercents[i]);
@@ -158,6 +148,9 @@ public class TextureBuilderConfigScreen extends Screen {
         }
         Inventory inventory = this.minecraft.player.getInventory();
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
+            if (itemNames[i] == null) {
+                continue;
+            }
             ItemStack stack = inventory.getItem(i);
             itemNames[i].setMessage(stack.isEmpty()
                     ? Component.translatable("text.texturebuilder.config.empty")
@@ -166,7 +159,12 @@ public class TextureBuilderConfigScreen extends Screen {
         }
     }
 
-    /** Recomputes the FR-09 total (red when not 100) and the normalized effective percentages. */
+    /**
+     * Recomputes the FR-09 total (red when not 100) and the normalized effective percentages.
+     *
+     * <p>Null-guarded throughout: widgets are built row by row in {@link #init()}, so a slider can
+     * exist before the label widgets this method writes to.
+     */
     private void refreshDerived() {
         ModConfig config = ModConfig.get();
         List<SlotEntry> entries = new ArrayList<>(TextureBuilder.HOTBAR_SIZE);
@@ -176,12 +174,17 @@ public class TextureBuilderConfigScreen extends Screen {
 
         int total = TextureBuilderHelper.includedWeightTotal(entries);
         Component totalText = Component.translatable("text.texturebuilder.config.total", total);
-        totalWidget.setMessage(total == 100
-                ? totalText.copy().withStyle(ChatFormatting.GREEN)
-                : totalText.copy().withStyle(ChatFormatting.RED)
-                        .append(Component.translatable("text.texturebuilder.config.total.normalized")));
+        if (totalWidget != null) {
+            totalWidget.setMessage(total == 100
+                    ? totalText.copy().withStyle(ChatFormatting.GREEN)
+                    : totalText.copy().withStyle(ChatFormatting.RED)
+                            .append(Component.translatable("text.texturebuilder.config.total.normalized")));
+        }
 
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
+            if (effectivePercents[i] == null) {
+                continue;
+            }
             if (config.autoNormalizeDisplay) {
                 double pct = TextureBuilderHelper.effectivePercent(entries, i);
                 effectivePercents[i].setMessage(pct <= 0.0D
@@ -191,6 +194,53 @@ public class TextureBuilderConfigScreen extends Screen {
                 effectivePercents[i].setMessage(Component.empty());
             }
         }
+    }
+
+    /**
+     * The per-slot weight control (FR-07). A slider rather than a text field: weights are
+     * relative, so the useful interaction is "a bit more of this one than that one", which a
+     * slider expresses directly and cannot put into an invalid state.
+     *
+     * <p>The slider's normalized 0.0–1.0 position maps onto {@link ModConfig#WEIGHT_MIN}–
+     * {@link ModConfig#WEIGHT_MAX}; at the 100px column width that is very close to one weight
+     * unit per pixel. Dragging gives coarse adjustment, and vanilla's
+     * {@link AbstractSliderButton#keyPressed} lets a focused slider be nudged one step at a time
+     * with the arrow keys (after Enter/Space arms it) for exact values.
+     *
+     * <p>Each change writes straight through to the live config (FR-10) and refreshes the total
+     * and effective-percentage columns, since changing any one slot's weight changes every other
+     * slot's normalized share.
+     */
+    private class WeightSlider extends AbstractSliderButton {
+        private final int slot;
+
+        WeightSlider(int slot, int weight) {
+            super(0, 0, COL_WEIGHT, ROW_HEIGHT, Component.empty(), toSliderValue(weight));
+            this.slot = slot;
+            this.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.config.weight.tooltip")));
+            this.updateMessage();
+        }
+
+        private int weight() {
+            return ModConfig.WEIGHT_MIN
+                    + Mth.floor(this.value * (ModConfig.WEIGHT_MAX - ModConfig.WEIGHT_MIN) + 0.5D);
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Component.literal(Integer.toString(weight())));
+        }
+
+        @Override
+        protected void applyValue() {
+            ModConfig.get().weights[slot] = weight(); // FR-10: applies immediately.
+            refreshDerived();
+        }
+    }
+
+    private static double toSliderValue(int weight) {
+        int span = ModConfig.WEIGHT_MAX - ModConfig.WEIGHT_MIN;
+        return Mth.clamp((double) (weight - ModConfig.WEIGHT_MIN) / span, 0.0D, 1.0D);
     }
 
     private StringWidget header(String key, int width) {
