@@ -43,10 +43,15 @@ source refer to that document.
   so the highlighted slot always shows which block just went down. (Set
   `restore_slot_after_placement = true` in the config if you'd rather the selection stay put on the
   slot you chose manually.) Only the 9 hotbar slots are ever used.
-  When a pooled slot runs out, the mod fires a single vanilla pick-block at the block you just
-  placed to restock the slot (instant refill in creative; pulled from your main inventory in
-  survival). If none are found anywhere, a brief "No more … found" message appears and the slot
-  stays in the pool as a miss.
+  When a pooled slot runs out, the mod **triggers your Pick Block keybind** to restock it (instant
+  refill in creative; pulled from your inventory in survival). Because it's a real pick-block
+  press, other mods that extend pick block join in — notably **PA9 ShulkerPickBlock**, so a slot
+  can restock straight out of a shulker box in your inventory. If nothing turns up within a second,
+  a brief "No more … found" message appears and the slot stays in the pool as a miss. The press
+  fires the instant the stack runs out, aimed at the block you just placed, so it always picks the
+  block that actually ran out rather than whatever you happen to be looking at next.
+  *Requires Pick Block to be bound* (it is by default, to the middle mouse button); if you've
+  unbound it, restocking falls back to vanilla sources only.
 - **Commands** — `/texturebuilder config | reload | status`. Config file:
   `config/texturebuilder.toml`.
 

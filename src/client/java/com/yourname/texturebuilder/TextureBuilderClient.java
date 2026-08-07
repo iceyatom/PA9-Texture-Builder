@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.yourname.texturebuilder.command.TextureBuilderCommands;
 import com.yourname.texturebuilder.config.ModConfig;
 import com.yourname.texturebuilder.hud.TextureBuilderHud;
+import com.yourname.texturebuilder.placement.PlacementRandomizer;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -61,6 +62,7 @@ public class TextureBuilderClient implements ClientModInitializer {
         TextureBuilder.LOGGER.warn("[TextureBuilder] Unexpected error; disabling for this session.", e);
         sessionFailed = true;
         active = false;
+        PlacementRandomizer.reset(); // Drop any in-flight placement/restock state.
         TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.failed"));
     }
 
@@ -84,6 +86,9 @@ public class TextureBuilderClient implements ClientModInitializer {
             while (toggleKey.consumeClick()) {
                 toggle(); // FR-01: works in-game regardless of any GUI being open.
             }
+            // Settles any in-flight pick-block restock (FR-13..FR-15), which resolves a tick or
+            // more after the keypress is queued.
+            PlacementRandomizer.tick();
             TextureBuilderHud.tick();
         });
 

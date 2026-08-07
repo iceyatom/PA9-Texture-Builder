@@ -11,6 +11,8 @@ import com.yourname.texturebuilder.hud.TextureBuilderHud;
 import com.yourname.texturebuilder.util.TextureBuilderHelper;
 import com.yourname.texturebuilder.util.TextureBuilderHelper.SlotEntry;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
@@ -24,6 +26,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The slot-switching engine behind each placement (FR-11..FR-19, SRS §1 design note).
@@ -63,6 +66,34 @@ public final class PlacementRandomizer {
     }
 
     private static Pending pending;
+
+    /**
+     * How long to wait for a queued Pick Block press to actually refill the slot before declaring
+     * it a miss (FR-15). Must cover vanilla consuming the click next tick plus, in survival, a
+     * server round-trip — and any work another pick-block mod does — so it is generous at 1s;
+     * the message is brief and disappearing, so a late one is unobtrusive, whereas a premature
+     * "no more found" would be wrong.
+     */
+    private static final int RESTOCK_TIMEOUT_TICKS = 20;
+
+    /** Sentinel for {@link RestockWatch#restoreSlot()} meaning "no deferred restore pending". */
+    private static final int NO_RESTORE = -1;
+
+    /**
+     * A restock in flight: the slot awaiting refill, what it held, the remaining window, and — only
+     * when {@code restore_slot_after_placement} is enabled — the slot to restore once the pick has
+     * resolved ({@link #NO_RESTORE} otherwise).
+     */
+    private record RestockWatch(int slot, Item item, int ticksLeft, int restoreSlot) {
+    }
+
+    /**
+     * In-flight restock attempts, indexed by hotbar slot. Per-slot rather than a single watch so
+     * that two depleted slots can recover independently: with one shared watch, alternating misses
+     * between two empty slots would keep replacing each other's watch, so neither would ever reach
+     * its timeout and no FR-15 message would ever appear.
+     */
+    private static final RestockWatch[] restockWatches = new RestockWatch[TextureBuilder.HOTBAR_SIZE];
 
     private PlacementRandomizer() {
     }
@@ -109,9 +140,16 @@ public final class PlacementRandomizer {
     }
 
     /**
-     * TAIL of the same {@code useItemOn} call: restock if the pick just emptied its slot
-     * (FR-13..FR-15, FR-18/FR-19), then restore the originally-held slot only if
-     * {@code restore_slot_after_placement} is enabled (see {@link #beforePlacement}).
+     * TAIL of the same {@code useItemOn} call: restock whenever the drawn slot is empty, then
+     * restore the originally-held slot only if {@code restore_slot_after_placement} is enabled
+     * (see {@link #beforePlacement}).
+     *
+     * <p>The restock fires on <em>depletion only</em> — the placement that consumed the slot's last
+     * item. A brief experiment also retried on every FR-16 miss, but that was reverted at the user's
+     * request: a miss places nothing, so the crosshair is on whatever the player happens to be
+     * aiming at rather than on a block of the depleted type, which made retries liable to pull an
+     * unrelated block into the pooled slot. Depletion is the one moment the just-placed block is
+     * guaranteed to be the item that ran out, which is what {@link #aimPickAtPlacedBlock} relies on.
      */
     public static void afterPlacement() {
         Pending p = pending;
@@ -127,16 +165,17 @@ public final class PlacementRandomizer {
         Inventory inventory = player.getInventory();
         try {
             if (p.hadItems() && inventory.getItem(p.pickSlot()).isEmpty()) {
-                attemptRestock(client, player, inventory, p);
+                attemptRestock(client, inventory, p, p.pickedItem());
             }
         } catch (RuntimeException e) {
             TextureBuilderClient.failSession(e);
         } finally {
-            // Only restore when the player has opted back into the original SRS §1 behaviour.
-            // When restoring, this runs even if the restock attempt threw (NFR-04) and is sent
-            // after the restock pick so a survival server processes the pick against the
-            // depleted, still-selected slot.
-            if (ModConfig.get().restoreSlotAfterPlacement
+            // Only restore when the player has opted back into the original SRS §1 behaviour, and
+            // only when no restock is in flight: vanilla picks into the *selected* slot, so
+            // restoring now would divert the queued pick away from the depleted slot. In that case
+            // the watch owns the restore and performs it once the pick resolves. Runs even if the
+            // restock attempt threw (NFR-04).
+            if (ModConfig.get().restoreSlotAfterPlacement && restockWatches[p.pickSlot()] == null
                     && inventory.getSelectedSlot() != p.originalSlot()) {
                 switchSlot(client, inventory, p.originalSlot());
             }
@@ -144,29 +183,108 @@ public final class PlacementRandomizer {
     }
 
     /**
-     * FR-13: a single pick-block attempt targeting the block that was just placed.
+     * FR-13: a single pick-block attempt to restock the slot the last placement just emptied.
      *
-     * <ul>
-     *   <li><b>Creative</b> (FR-18) — instantly refill to a full stack, mirroring vanilla creative
-     *       pick-block: set the stack locally and send the standard creative slot packet
-     *       ({@code handleCreativeModeItemAdd}, hotbar screen-slot id {@code 36 + slot}).</li>
-     *   <li><b>Survival</b> (FR-19) — if a matching stack exists in the main inventory, fire
-     *       vanilla's own pick-block entry point {@code handlePickItemFromBlock} at the placed
-     *       position: the server moves the match into the (still selected, now empty) slot via the
-     *       standard {@code ServerboundPickItemFromBlockPacket} — no custom payloads (PKT-03/04).
-     *       A match sitting only in another hotbar slot is left alone (vanilla would merely switch
-     *       the selection, which the restore would immediately undo).</li>
-     *   <li><b>Nothing anywhere</b> (FR-15) — show the disappearing "no more X found" message and
-     *       leave the slot empty and still included in the pool.</li>
-     * </ul>
+     * <p><b>This fires the player's actual Pick Block keybind</b> rather than calling the
+     * interaction manager directly, so that <em>other</em> mods which extend pick block take part.
+     * Vanilla resolves pick block in the private {@code Minecraft.pickBlockOrEntity()}, reached
+     * only through {@code handleKeybinds()}:
+     * <pre>while (this.options.keyPickItem.consumeClick()) { this.pickBlockOrEntity(); }</pre>
+     * {@link KeyMapping#click} queues exactly that click, so the press is indistinguishable from a
+     * real one and every pick-block hook downstream runs. The previous implementation called
+     * {@code MultiPlayerGameMode.handlePickItemFromBlock} — a method *inside* that flow — which
+     * silently bypassed those hooks. That is why PA9 ShulkerPickBlock (which injects at the TAIL of
+     * {@code Minecraft.pickBlockOrEntity}) never restocked from inventory shulker boxes here.
+     *
+     * <p>Because the click is consumed on the <em>next</em> tick, the crosshair target has been
+     * recomputed by then and points at the newly placed block — the same reason pressing pick block
+     * by hand right after placing grabs the block you just placed. It also means the outcome is not
+     * known synchronously, so success/failure is settled by {@link #tick()} rather than here.
+     *
+     * <p>Creative (FR-18) and survival (FR-19) both go through this one path; vanilla already
+     * implements the mode-specific behaviour (instant full stack vs. inventory search), using only
+     * standard packets (PKT-03/04). If Pick Block is unbound there is no key to press, so
+     * {@link #attemptDirectRestock} reproduces the old direct behaviour as a fallback.
      */
-    private static void attemptRestock(Minecraft client, LocalPlayer player, Inventory inventory, Pending p) {
+    private static void attemptRestock(Minecraft client, Inventory inventory, Pending p, Item item) {
+        // One attempt at a time per slot: while a press is still unresolved, another would be
+        // redundant and would keep resetting the window so the FR-15 message could never fire.
+        // Sustained misses therefore produce a steady ~1s attempt/message cadence rather than one
+        // pick-block press per placement, which would flood a survival server with pick packets.
+        if (restockWatches[p.pickSlot()] != null) {
+            return;
+        }
+        // Armed before the pick so tick() can settle the outcome (success, or the FR-15 message).
+        // The pick must land in the depleted slot, which vanilla achieves by picking into the
+        // *selected* slot — so when restore-after-placement is on, the restore is handed to the
+        // watch and deferred until the pick has resolved (see afterPlacement/tick).
+        restockWatches[p.pickSlot()] = new RestockWatch(p.pickSlot(), item, RESTOCK_TIMEOUT_TICKS,
+                ModConfig.get().restoreSlotAfterPlacement ? p.originalSlot() : NO_RESTORE);
+
+        KeyMapping pickKey = client.options.keyPickItem;
+        if (pickKey.isUnbound()) {
+            // KeyMapping.click() dispatches to every mapping bound to the given key, so clicking
+            // the "unknown" key would fire every unbound keybind in the game. Never do that.
+            if (ModConfig.get().debugLogging) {
+                TextureBuilder.LOGGER.info("[TextureBuilder] Pick Block is unbound; restocking {} directly "
+                        + "(other pick-block mods will not participate).", item);
+            }
+            attemptDirectRestock(client, inventory, p, item);
+            return;
+        }
+
+        aimPickAtPlacedBlock(client, p, item);
+        KeyMapping.click(InputConstants.getKey(pickKey.saveString()));
+        if (ModConfig.get().debugLogging) {
+            TextureBuilder.LOGGER.info("[TextureBuilder] slot {} emptied; fired a Pick Block keypress to restock {}",
+                    p.pickSlot() + 1, item);
+        }
+    }
+
+    /**
+     * Points the crosshair target at the block this placement just put down, so the pick resolves
+     * the item that actually ran out.
+     *
+     * <p>Vanilla's pick has no "which item" input — {@code pickBlockOrEntity()} is private, takes no
+     * arguments, and reads only {@link Minecraft#hitResult}. That field is recomputed once per tick
+     * by {@code gameRenderer.pick()}, which runs <em>before</em> {@code handleKeybinds()}, so at this
+     * point it still refers to the block the player aimed at — i.e. the block placed <em>against</em>,
+     * not the new one. Left alone, the restock would pick that neighbour's item instead.
+     *
+     * <p>{@code hitResult} is a public field, and within one {@code handleKeybinds()} pass
+     * {@code keyUse} is consumed at offset 581 and {@code keyPickItem} at 601 — so a press queued
+     * here is consumed a few instructions later, still inside this tick, and reads whatever is in
+     * {@code hitResult} at that moment. Overwriting it now therefore aims that one pick precisely.
+     * Because the field is rebuilt from scratch on the next tick, nothing needs restoring, and
+     * because other pick-block mods read the same field (ShulkerPickBlock resolves via
+     * {@code getCloneItemStack} on {@code client.hitResult}), they are aimed correctly too.
+     *
+     * <p>No-op if the placed block cannot be located — better to let the pick use the real crosshair
+     * target than to aim it at something that is not there.
+     */
+    private static void aimPickAtPlacedBlock(Minecraft client, Pending p, Item item) {
+        BlockPos placedPos = findPlacedBlock(client, p.hit(), item);
+        if (placedPos == null) {
+            if (ModConfig.get().debugLogging) {
+                TextureBuilder.LOGGER.info("[TextureBuilder] could not locate the placed {}; "
+                        + "pick will use the live crosshair target", item);
+            }
+            return;
+        }
+        client.hitResult = new BlockHitResult(Vec3.atCenterOf(placedPos),
+                p.hit().getDirection().getOpposite(), placedPos, false);
+    }
+
+    /**
+     * Fallback used only when the Pick Block key is unbound: the pre-2026-08-07 behaviour, calling
+     * the interaction manager directly. Restocks from vanilla sources only — pick-block hooks added
+     * by other mods cannot run, because this does not go through {@code pickBlockOrEntity}.
+     */
+    private static void attemptDirectRestock(Minecraft client, Inventory inventory, Pending p, Item item) {
         MultiPlayerGameMode gameMode = client.gameMode;
         if (gameMode == null) {
             return;
         }
-        Item item = p.pickedItem();
-
         if (gameMode.getPlayerMode() == GameType.CREATIVE) {
             ItemStack refill = new ItemStack(item);
             refill.setCount(refill.getMaxStackSize());
@@ -175,23 +293,71 @@ public final class PlacementRandomizer {
             gameMode.handleCreativeModeItemAdd(refill, 36 + p.pickSlot());
             return;
         }
-
-        int mainInventoryMatch = findMainInventoryMatch(inventory, item, p.pickSlot());
-        if (mainInventoryMatch >= 0) {
+        if (findMainInventoryMatch(inventory, item, p.pickSlot()) >= 0) {
             BlockPos placedPos = findPlacedBlock(client, p.hit(), item);
             if (placedPos != null) {
                 gameMode.handlePickItemFromBlock(placedPos, false);
-            } else if (ModConfig.get().debugLogging) {
-                TextureBuilder.LOGGER.info("[TextureBuilder] restock skipped: placed {} not found at hit position",
-                        item);
             }
+        }
+    }
+
+    /**
+     * Settles a pending restock (FR-13..FR-15). Called once per client tick.
+     *
+     * <p>The pick-block keypress is resolved asynchronously — vanilla consumes it on the next tick,
+     * and in survival the server then has to move the item — so success cannot be observed inline.
+     * This watches the slot until it refills, and only if it is still empty when the window expires
+     * does it report the FR-15 "no more X found" message, leaving the slot empty and still in the
+     * pool. Waiting the full window matters for correctness as much as for latency: the item may be
+     * coming from a source this mod cannot see, such as a shulker box opened by another mod.
+     */
+    public static void tick() {
+        Minecraft client = Minecraft.getInstance();
+        LocalPlayer player = client.player;
+        if (player == null) {
+            reset();
             return;
         }
-
-        if (!hasAnywhere(inventory, item, p.pickSlot())) {
-            TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.no_more",
-                    new ItemStack(item).getHoverName()));
+        Inventory inventory = player.getInventory();
+        for (int slot = 0; slot < TextureBuilder.HOTBAR_SIZE; slot++) {
+            RestockWatch watch = restockWatches[slot];
+            if (watch == null) {
+                continue;
+            }
+            if (!inventory.getItem(slot).isEmpty()) {
+                restockWatches[slot] = null; // Restocked, by vanilla or by another pick-block mod.
+                if (ModConfig.get().debugLogging) {
+                    TextureBuilder.LOGGER.info("[TextureBuilder] slot {} restocked with {}",
+                            slot + 1, inventory.getItem(slot).getItem());
+                }
+                finishDeferredRestore(client, player, watch);
+            } else if (watch.ticksLeft() <= 1) {
+                restockWatches[slot] = null;
+                TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.no_more",
+                        new ItemStack(watch.item()).getHoverName()));
+                finishDeferredRestore(client, player, watch);
+            } else {
+                restockWatches[slot] = new RestockWatch(slot, watch.item(), watch.ticksLeft() - 1,
+                        watch.restoreSlot());
+            }
         }
+    }
+
+    /**
+     * Performs the slot restore that {@link #afterPlacement()} handed off because a pick-block
+     * restock was still in flight. No-op unless {@code restore_slot_after_placement} is enabled.
+     */
+    private static void finishDeferredRestore(Minecraft client, LocalPlayer player, RestockWatch watch) {
+        Inventory inventory = player.getInventory();
+        if (watch.restoreSlot() != NO_RESTORE && inventory.getSelectedSlot() != watch.restoreSlot()) {
+            switchSlot(client, inventory, watch.restoreSlot());
+        }
+    }
+
+    /** Drops all in-flight restock watches, e.g. when the session is disabled after an error. */
+    public static void reset() {
+        pending = null;
+        java.util.Arrays.fill(restockWatches, null);
     }
 
     /** First main-inventory (non-hotbar, slots 9–35) slot holding {@code item}, or -1. */
@@ -202,16 +368,6 @@ public final class PlacementRandomizer {
             }
         }
         return -1;
-    }
-
-    /** Whether {@code item} exists anywhere in the 36 player inventory slots besides {@code excludeSlot}. */
-    private static boolean hasAnywhere(Inventory inventory, Item item, int excludeSlot) {
-        for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
-            if (i != excludeSlot && inventory.getItem(i).is(item)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

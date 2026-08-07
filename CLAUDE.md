@@ -188,9 +188,61 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
 6. **Held-item guard** — the randomizer only engages when the held item is empty or a `BlockItem`,
    so right-clicking with tools/food/buckets stays fully vanilla even while ON (keeps NFR-05 safe
    in mixed play; the SRS is silent on non-block right-clicks).
-7. **Survival restock uses vanilla `handlePickItemFromBlock`** at the just-placed position —
-   server-authoritative on vanilla servers, satisfying PKT-03/05 with zero custom logic. Fired
-   before the slot restore so the server moves the match into the depleted (still selected) slot.
+7. **Restock fires the player's real Pick Block keybind (changed 2026-08-07 at the user's
+   request).** Previously it called `MultiPlayerGameMode.handlePickItemFromBlock` directly. That is
+   a method *inside* vanilla's pick flow, so **mods that hook pick block never ran** — concretely,
+   sibling mod **PA9 ShulkerPickBlock injects at the TAIL of the private
+   `Minecraft.pickBlockOrEntity()`** and so never restocked from inventory shulker boxes here.
+   Verified in 26.2 bytecode that `Minecraft.handleKeybinds()` contains
+   `while (options.keyPickItem.consumeClick()) { pickBlockOrEntity(); }`, and `pickBlockOrEntity`
+   is **private** (cannot be called directly), so queueing a click via the public static
+   `KeyMapping.click(InputConstants.getKey(keyPickItem.saveString()))` is the correct — and
+   user-requested — way in. Creative and survival now share this one path; vanilla supplies the
+   mode-specific behaviour (FR-18/FR-19) using only standard packets (PKT-03/04).
+   - **Unbound guard (important):** `KeyMapping.click` dispatches to *every* mapping bound to the
+     given key, so clicking the `UNKNOWN` key would fire **every unbound keybind in the game**.
+     `isUnbound()` is checked first, falling back to `attemptDirectRestock` (the old direct path).
+   - **Asynchronous outcome:** the click is consumed on the *next* tick, so success can't be seen
+     inline. `RestockWatch` + `PlacementRandomizer.tick()` watch the slot for
+     `RESTOCK_TIMEOUT_TICKS` (20 = 1s, generous to cover a survival server round-trip *and* another
+     mod's work) and only then emit the FR-15 "no more X found" message. Waiting is required for
+     correctness, not just latency: the item may arrive from a source this mod can't see (a shulker
+     box). The old immediate `hasAnywhere()` inventory scan was **removed** precisely because it
+     would have reported "no more found" for items sitting inside shulker boxes.
+8. **Restock fires on depletion only, and the pick is aimed at the block just placed.**
+   A brief experiment (same day) also retried the pick on every FR-16 miss, to stop a failed attempt
+   leaving a slot dead for the session. **Reverted at the user's request**, because a miss places
+   nothing, so the crosshair sits on whatever the player is aiming at rather than a block of the
+   depleted type — retries were liable to pull an unrelated block into the pooled slot. Depletion is
+   the one moment the just-placed block is guaranteed to be the item that ran out. `lastKnownItem[]`
+   and `message.texturebuilder.no_more_unknown` existed only for that experiment and were removed.
+   **Trade-off accepted: if the depletion-moment pick fails, that slot stays empty for the session.**
+   - **`aimPickAtPlacedBlock` — why it is needed and why it is safe.** Vanilla's pick has no "which
+     item" input: `pickBlockOrEntity()` is private, no-arg, and reads only the **public**
+     `Minecraft.hitResult`. Verified tick order: `Minecraft.tick()` calls `gameRenderer.pick()` at
+     offset 93 and `handleKeybinds()` at 181, so when our TAIL runs, `hitResult` still refers to the
+     block placed *against* — picking it would restock the neighbour's item, not the depleted one.
+     Within one `handleKeybinds()` pass, **`keyUse` is consumed at offset 581 and `keyPickItem` at
+     601**, so a press queued in our TAIL is consumed a few instructions later *in the same tick* and
+     reads whatever `hitResult` holds then. Overwriting the field there aims that single pick exactly.
+     No restore is needed (the field is rebuilt next tick), and because other pick-block mods read
+     the same field — ShulkerPickBlock resolves `getCloneItemStack` from `client.hitResult` — they
+     are aimed correctly too, for free. No-op when the placed block can't be located.
+   - ⚠️ **Held right-click nuance:** `handleKeybinds` also drives placement from the *continuous*
+     `keyUse.isDown()` path at ~660-687, i.e. **after** the 601 pick loop. A press queued from that
+     path is consumed on the *next* tick, by which time `gameRenderer.pick()` has overwritten our
+     aim. It then falls back to the live crosshair, which usually still points at the just-placed
+     block (it is now the nearest surface). Guaranteeing the aim there too would need a mixin at
+     HEAD of the private `pickBlockOrEntity`.
+   - `restockWatches[]` stays **per-slot**: two slots can each have an unresolved attempt at once,
+     and a single shared watch would let them overwrite each other so neither reached its timeout.
+   - **Deferred restore:** vanilla picks into the *selected* slot, so when
+     `restore_slot_after_placement = true` the restore must not run before the pick resolves or it
+     would divert the item to the wrong slot. `afterPlacement` skips the restore while a watch is
+     live and hands the slot to `RestockWatch.restoreSlot`; `finishDeferredRestore` does it once the
+     pick settles. (No-op in the default configuration, where nothing is restored.)
+   - The crosshair target is stale during the TAIL but correct by the time the click is consumed —
+     the same reason pressing pick block by hand right after placing grabs what you just placed.
 
 ## Verified vs needs in-game confirmation
 - ✅ Compiles clean against real 26.2 (jar + sources jar). Weighted selector unit-verified.
