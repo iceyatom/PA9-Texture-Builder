@@ -10,6 +10,7 @@ import com.yourname.texturebuilder.util.TextureBuilderHelper.SlotEntry;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.StringWidget;
@@ -91,14 +92,7 @@ public class TextureBuilderConfigScreen extends Screen {
             itemNames[i] = new StringWidget(COL_ITEM, ROW_HEIGHT, Component.empty(), this.font);
             rows.addChild(itemNames[i]);
 
-            rows.addChild(CycleButton.onOffBuilder(config.included[slot])
-                    .displayOnlyValue()
-                    .create(0, 0, COL_INCLUDE, ROW_HEIGHT,
-                            Component.translatable("text.texturebuilder.config.included"),
-                            (button, value) -> {
-                                config.included[slot] = value; // FR-10: applies immediately.
-                                refreshDerived();
-                            }));
+            rows.addChild(includedToggle(config, slot));
 
             rows.addChild(new WeightSlider(slot, config.weights[slot]));
 
@@ -241,6 +235,28 @@ public class TextureBuilderConfigScreen extends Screen {
     private static double toSliderValue(int weight) {
         int span = ModConfig.WEIGHT_MAX - ModConfig.WEIGHT_MIN;
         return Mth.clamp((double) (weight - ModConfig.WEIGHT_MIN) / span, 0.0D, 1.0D);
+    }
+
+    /**
+     * The per-slot Included/Excluded toggle (FR-08). Built from the generic {@link CycleButton}
+     * factory rather than {@link CycleButton#onOffBuilder} so the ON/OFF label can be colored —
+     * malilib's SUCCESS/ERROR convention (green {@code §a} / red {@code §c}, confirmed from the
+     * installed malilib jar's lang file), matching the toggle hotkey's confirmation message and
+     * Litematica's own toggle messages, since Litematica is built on malilib.
+     */
+    private AbstractWidget includedToggle(ModConfig config, int slot) {
+        return CycleButton.<Boolean>builder(
+                        value -> Component.translatable(value ? "text.texturebuilder.on" : "text.texturebuilder.off")
+                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED),
+                        config.included[slot])
+                .withValues(true, false)
+                .displayOnlyValue()
+                .create(0, 0, COL_INCLUDE, ROW_HEIGHT,
+                        Component.translatable("text.texturebuilder.config.included"),
+                        (button, value) -> {
+                            config.included[slot] = value; // FR-10: applies immediately.
+                            refreshDerived();
+                        });
     }
 
     private StringWidget header(String key, int width) {

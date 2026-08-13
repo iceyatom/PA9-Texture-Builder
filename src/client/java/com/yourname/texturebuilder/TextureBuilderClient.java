@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -43,15 +44,21 @@ public class TextureBuilderClient implements ClientModInitializer {
         return active && !sessionFailed;
     }
 
-    /** Flips the session toggle and confirms via a disappearing message (FR-01/FR-02). */
+    /**
+     * Flips the session toggle and confirms via a disappearing message (FR-01/FR-02), with the
+     * ON/OFF word colored to malilib's SUCCESS/ERROR convention (green {@code §a} / red {@code §c}
+     * — confirmed from the installed malilib jar's {@code assets/malilib/lang/en_us.json}), which
+     * is what Litematica's own toggle messages use, since Litematica is built on malilib.
+     */
     public static void toggle() {
         if (sessionFailed) {
             TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.failed"));
             return;
         }
         active = !active;
-        TextureBuilderHud.showMessage(Component.translatable(
-                active ? "message.texturebuilder.on" : "message.texturebuilder.off"));
+        TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.toggle",
+                Component.translatable(active ? "text.texturebuilder.on" : "text.texturebuilder.off")
+                        .withStyle(active ? ChatFormatting.GREEN : ChatFormatting.RED)));
     }
 
     /**

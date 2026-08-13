@@ -1,4 +1,4 @@
-# PA9 TextureBuilder
+# PA9 Texture Builder
 
 A **client-side Fabric mod** for **Minecraft Java Edition 26.2** that automates block variation
 while building by hand. When toggled ON, each block placement first silently switches the active
@@ -32,7 +32,8 @@ source refer to that document.
 
 - **Toggle** — bind "Toggle Texture Builder" in Options → Controls (unbound by default), or set
   `toggle_keybind` in the config. Toggling shows a brief "Texture Builder: ON/OFF" message above
-  the hotbar. The state is per-session; it only starts ON if `enabled = true` in the config.
+  the hotbar, with ON in green and OFF in red (matching Litematica/malilib's toggle coloring). The
+  state is per-session; it only starts ON if `enabled = true` in the config.
 - **Configure the pool** — open your inventory and click the small **TB** button (just below the
   crafting output slot), or run `/texturebuilder config`, or use Mod Menu's gear. Each hotbar slot
   row shows the item currently in it (live), an Included toggle, and a **weight slider** (0–100).

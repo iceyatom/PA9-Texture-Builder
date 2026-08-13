@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "texturebuilder",
   "version": "${version}",
-  "name": "PA9 TextureBuilder",
+  "name": "PA9 Texture Builder",
   "description": "Weighted-random hotbar texturing for manual building. Silently switches the active hotbar slot to a weighted random pick from a configurable pool immediately before each block placement, then restores it.",
   "authors": [
     "PersonalAtom9"
@@ -12,6 +12,7 @@
     "sources": ""
   },
   "license": "MIT",
+  "icon": "assets/texturebuilder/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [

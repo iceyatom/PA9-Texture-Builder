@@ -1,4 +1,4 @@
-# CLAUDE.md — PA9 TextureBuilder
+# CLAUDE.md — PA9 Texture Builder
 
 Knowledge base for future Claude runs on this project. Read this first.
 
@@ -102,8 +102,9 @@ Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.l
   shape). Clamps duration 500–5000ms. Reload via `/texturebuilder reload` (FR-21).
 - `gui/TextureBuilderConfigScreen` — vanilla-widgets-only (HeaderAndFooterLayout + GridLayout);
   9 rows: slot label / live item **name** (refreshed in `tick()`; `GuiGraphicsExtractor` has no
-  simple item-icon call, so FR-07's "preview" is the name) / Included CycleButton / **weight
-  slider** / effective-% column (`auto_normalize_display`). Total line green at 100, else red +
+  simple item-icon call, so FR-07's "preview" is the name) / Included **CycleButton (colored, see
+  below)** / **weight slider** / effective-% column (`auto_normalize_display`). Total line green
+  at 100, else red +
   "normalizes at runtime" (FR-09, never blocks closing). Edits hit the live config immediately;
   TOML written in `onClose()` by every route (FR-10). Parent screen restored on close (FR-06).
   **Weight sliders (changed 2026-08-07 at the user's request, from `EditBox` text entry):**
@@ -149,6 +150,29 @@ Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.l
      create-time-only placement goes stale on every toggle. Hence the `onRecipeBookButtonClick`
      TAIL hook (`InventoryScreen` overrides it; the override just sets `buttonClicked = true`).
   `containerTick` TAIL is a cheap per-tick safety net for any path not enumerated above.
+
+### Toggle/Included coloring: malilib's SUCCESS/ERROR convention (added 2026-08-07)
+The ON/OFF toggle-hotkey message and the config screen's Included/Excluded label are colored green
+(`ChatFormatting.GREEN`, `§a`) / red (`ChatFormatting.RED`, `§c`), at the user's request to match
+"the conventional coloring... that Litematica uses for toggles". Litematica has no local color
+constants of its own for this — it is built on **malilib**, whose message system defines
+`Message.MessageType.SUCCESS`/`ERROR`/`WARNING`/`INFO`, each keyed to a lang-file formatting code.
+**Confirmed directly from the installed `malilib-fabric-26.2-0.29.2.jar`'s
+`assets/malilib/lang/en_us.json`:** `success = "§a"` (green), `error = "§c"` (red),
+`warning = "§6"` (gold), `info = "§f"` (white) — i.e. exactly `ChatFormatting.GREEN`/`RED` in
+Mojmap. (Could not trace the exact Litematica call site that maps ON→SUCCESS/OFF→ERROR — its
+compiled classes don't reference `MessageType` by that literal string, likely because the mapping
+happens through a shaded/relocated malilib copy — but the color *values* are unambiguous from
+malilib's own lang file, and green-for-on/red-for-off is the universal convention regardless.)
+- `TextureBuilderClient.toggle()` — lang key changed from two fixed strings
+  (`message.texturebuilder.on`/`.off`) to one parameterized `message.texturebuilder.toggle` =
+  `"Texture Builder: %s"`, with a colored `text.texturebuilder.on`/`.off` Component passed as the
+  `%s` argument — the same "Component into a translatable's `%s` slot" pattern already used for
+  `message.texturebuilder.no_more`'s item name.
+- `TextureBuilderConfigScreen.includedToggle()` — replaced `CycleButton.onOffBuilder` (vanilla's
+  fixed gray/white "On"/"Off") with the generic `CycleButton.<Boolean>builder(Function, initial)`
+  factory so the label Component itself carries the color; reuses the same
+  `text.texturebuilder.on`/`.off` keys as the toggle message for one source of truth.
   **Note:** `InventoryScreen.init()` swaps creative players to `CreativeModeInventoryScreen` and
   returns early, so **the TB button does not appear in the creative inventory** — creative users
   reach the config screen via `/texturebuilder config` or Mod Menu. FR-05 says "the vanilla player
