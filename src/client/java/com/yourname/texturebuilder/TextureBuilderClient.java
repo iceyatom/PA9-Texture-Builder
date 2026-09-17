@@ -79,8 +79,9 @@ public class TextureBuilderClient implements ClientModInitializer {
         active = ModConfig.get().enabled; // FR-03: OFF unless explicitly configured otherwise.
 
         // FR-01: unbound by default; bindable via the vanilla Controls screen or the TOML.
+        // Use Minecraft's sentinel: 26.3 uses SDL's 0, and the old GLFW -1 crashes on focus.
         toggleKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.texturebuilder.toggle", -1, KeyMapping.Category.GAMEPLAY));
+                "key.texturebuilder.toggle", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.GAMEPLAY));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 TextureBuilderCommands.register(dispatcher));
