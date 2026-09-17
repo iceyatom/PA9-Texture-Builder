@@ -79,7 +79,7 @@ processResources {
 }
 
 // Matches the naming convention used by the other mods in this modpack, e.g.
-// "shulker-pick-block - 26.2 - 1.1.0.jar": "<name> - <minecraft_version> - <mod_version>".
+// "shulker-pick-block - 26.3 - 1.1.0.jar": "<name> - <minecraft_version> - <mod_version>".
 def outputBaseName = "${project.archives_base_name} - ${project.minecraft_version} - ${project.mod_version}"
 
 jar {
