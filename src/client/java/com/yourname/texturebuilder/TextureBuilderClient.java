@@ -105,7 +105,7 @@ public class TextureBuilderClient implements ClientModInitializer {
                 Identifier.fromNamespaceAndPath(TextureBuilder.MOD_ID, "messages"),
                 (context, tickCounter) -> TextureBuilderHud.render(context));
 
-        TextureBuilder.LOGGER.info("{} initialised (client-side only; {}).", TextureBuilder.MOD_NAME,
+        TextureBuilder.LOGGER.info("{} initialised (client-side only; {}).",TextureBuilder.MOD_NAME,
                 active ? "enabled at launch via config" : "toggled off");
     }
 
