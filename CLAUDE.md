@@ -174,9 +174,19 @@ malilib's own lang file, and green-for-on/red-for-off is the universal conventio
   factory so the label Component itself carries the color; reuses the same
   `text.texturebuilder.on`/`.off` keys as the toggle message for one source of truth.
   **Note:** `InventoryScreen.init()` swaps creative players to `CreativeModeInventoryScreen` and
-  returns early, so **the TB button does not appear in the creative inventory** — creative users
-  reach the config screen via `/texturebuilder config` or Mod Menu. FR-05 says "the vanilla player
-  inventory screen", so this is spec-compliant, but see TODO 2.
+  returns early, so this mixin's button never appears in creative — `CreativeModeInventoryScreenMixin`
+  covers that screen.
+- `mixin/client/CreativeModeInventoryScreenMixin` — the same **TB** button on the creative
+  inventory's Survival Inventory tab (added 2026-10-11 at the user's request, v1.0.1). Targets
+  `CreativeModeInventoryScreen` `init` / `selectTab` / `containerTick`, all TAIL, all declared on
+  the class itself and each with a single `return` (26.3 bytecode). Tab switches don't re-run
+  `init()`, so `selectTab` TAIL toggles `button.visible = isInventoryOpen()`; `init()` calls
+  `selectTab` before the button exists (null guard). Placement: 24x12 at
+  `(leftPos + imageWidth - 49, topPos + 28)` → GUI-relative x 146-170, y 28-40 on the 195-wide
+  panel, right edge flush with the last inventory column. Clear of the inventory-tab layout in
+  `selectTab`: armor slots `(54 + 54*col, 6 + 27*row)`, offhand `(35, 20)`, inventory rows from
+  y 54, destroy slot `(173, 112)`. Fabric API's creative-tab mixin targets the same class; no
+  conflict seen at class-load.
 - `hud/TextureBuilderHud` — self-expiring above-hotbar text (toggle confirmations FR-02, restock
   misses FR-15); duration = `restock_message_duration_ms`.
 - `command/TextureBuilderCommands` — `/texturebuilder config|reload|status` via
@@ -281,9 +291,7 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
 
 ## TODO / next steps
 1. Launch a 26.2 dev client (`gradlew runClient`) or install the jar; walk TC-01..TC-12.
-2. **Creative-mode config access** — the TB button can't appear in creative (see mixin note).
-   Since creative is a primary use case for this mod (TC-03 assumes unlimited creative stacks),
-   consider a second mixin adding the same button to `CreativeModeInventoryScreen`'s inventory tab.
-   Not done yet: it's beyond FR-05's wording and needs the user's call.
+2. ~~**Creative-mode config access**~~ — done 2026-10-11 (`CreativeModeInventoryScreenMixin`).
+   Class-load verified in a 26.3 dev client; the button's on-screen look still wants an in-game glance.
 3. If the TB button crowds other inventory mods, make its corner configurable (SRS §12 risk).
 4. Consider a repeat-suppression window for the FR-15 message (SRS §12 "future version").
