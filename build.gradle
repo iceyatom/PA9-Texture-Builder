@@ -1,5 +1,5 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
 	id 'maven-publish'
 }
 
@@ -41,32 +41,34 @@ loom {
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
-	// No `mappings` dependency: 26.x Minecraft jars ship with real (Mojmap) names already,
-	// and Fabric's intermediary/Yarn pipeline stops at 1.21.11 — see CLAUDE.md.
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	// 1.20.1 jars are obfuscated, so Loom remaps them. Official Mojang mappings keep the
+	// source on the same Mojmap names as the 26.x branches (the jar is remapped to
+	// intermediary on build, as every 1.20.1 Fabric mod is).
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
 	// Mod Menu is compile-only (FR-22): it supplies the `ModMenuApi`/`ConfigScreenFactory`
 	// interfaces implemented by `compat.modmenu.ModMenuIntegration`, but is NOT required at
 	// runtime. Loader only instantiates the `modmenu` entrypoint when Mod Menu is installed,
 	// so that class is never loaded otherwise and no NoClassDefFoundError is possible.
-	compileOnly("com.terraformersmc:modmenu:${project.mod_menu_version}") { transitive = false }
+	modCompileOnly("com.terraformersmc:modmenu:${project.mod_menu_version}") { transitive = false }
 }
 
 java {
-	// MC 26.x requires Java 25 for both compilation and the Gradle toolchain (SRS §2).
+	// MC 1.20.1 targets Java 17 (the version Mojang ships with it).
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
+		languageVersion = JavaLanguageVersion.of(17)
 	}
 
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
+	sourceCompatibility = JavaVersion.VERSION_17
+	targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
+	it.options.release = 17
 	it.options.encoding = 'UTF-8'
 }
 
@@ -82,15 +84,21 @@ processResources {
 // "shulker-pick-block - 26.3 - 1.1.0.jar": "<name> - <minecraft_version> - <mod_version>".
 def outputBaseName = "${project.archives_base_name} - ${project.minecraft_version} - ${project.mod_version}"
 
+// The jar Loom produces before remapping is a dev-only intermediate; keep it out of the way
+// so build/libs holds just the remapped, distributable jar under the modpack name.
 jar {
-	archiveFileName = "${outputBaseName}.jar"
+	archiveClassifier = "dev"
 
 	from("LICENSE") {
 		rename { "${it}_${project.archives_base_name}" }
 	}
 }
 
-sourcesJar {
+remapJar {
+	archiveFileName = "${outputBaseName}.jar"
+}
+
+remapSourcesJar {
 	archiveFileName = "${outputBaseName}-sources.jar"
 }
 

@@ -11,6 +11,32 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.20.1 backport (branch `1.20.1`, verified 2026-10-15)
+This branch targets **Minecraft 1.20.1 / Fabric API 0.92.12+1.20.1 / Java 17**; the 26.x notes
+below describe the `main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** Loom 1.17.21 via plugin id **`net.fabricmc.fabric-loom-remap`** (1.20.1 is
+  obfuscated), `mappings loom.officialMojangMappings()` so source stays Mojmap, `modImplementation`
+  / `modCompileOnly`, Mod Menu 7.2.2, JDK 17 toolchain (`C:\Program Files\Java\jdk-17`). Output is
+  `remapJar` → `build/libs/texture-builder - 1.20.1 - 1.0.1.jar`; the unremapped jar goes to
+  `build/devlibs` with a `-dev` classifier. Loom remaps mixin target strings in the class files
+  directly (no refmap is produced) — confirmed `init` → `method_25426` etc. in the built jar.
+- **API mapping 26.x → 1.20.1:** `minecraft.gui.setScreen` → `minecraft.setScreen`;
+  `GuiGraphicsExtractor.text` → `GuiGraphics.drawString`; `HudElementRegistry` → `HudRenderCallback`;
+  `KeyMappingHelper.registerKeyMapping` → `KeyBindingHelper.registerKeyBinding` with category
+  string `key.categories.gameplay`; `ClientCommands` → `ClientCommandManager`;
+  `Inventory.get/setSelectedSlot` → public field `selected`; `addTitleHeader` →
+  `addToHeader(new StringWidget(title, font))`; `CycleButton.builder(fn, initial)` →
+  `builder(fn).withInitialValue(v)`; direct-restock fallback `handlePickItemFromBlock(pos)` →
+  1.20.1's vanilla survival pick `handlePickItem(inventorySlot)` (server moves it into the selected slot).
+- **Recipe-book reposition hook:** 1.20.1 has no `onRecipeBookButtonClick()`; the toggle logic is the
+  button lambda, which Mojmap leaves unnamed, so it is `method_19891` in **both** dev and production —
+  injected with `remap = false`.
+- **Verified:** dev `runClient` and a production launch of the installed `fabric-loader-0.18.4-1.20.1`
+  profile with the built jar + Fabric API 0.92.12 both reach the title screen; a temporary probe
+  force-loaded `InventoryScreen`/`CreativeModeInventoryScreen`/`MultiPlayerGameMode` (in production
+  by intermediary names `class_490`/`class_481`/`class_636`, since string names are not remapped)
+  with all mixins applied.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API

@@ -17,7 +17,6 @@ import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
-import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -32,9 +31,8 @@ import net.minecraft.world.item.ItemStack;
  * closed regardless, since selection normalizes proportionally at runtime, FR-09).
  *
  * <p>Built from vanilla widgets only — no Cloth Config / YACL — mirroring the author's other 26.2
- * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick:
- * the 26.2 {@code GuiGraphicsExtractor} render model exposes no simple item-icon draw call, so the
- * name is the verified widget-safe way to show live slot contents.
+ * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick
+ * (kept from the 26.x release, whose render model exposed no simple item-icon draw call).
  *
  * <p>Edits apply to the live config immediately (FR-10); the TOML is written when the screen
  * closes, by any route (Done, ESC, or the back control). A parent screen (the inventory) is
@@ -72,7 +70,7 @@ public class TextureBuilderConfigScreen extends Screen {
     protected void init() {
         ModConfig config = ModConfig.get();
         this.layout = new HeaderAndFooterLayout(this);
-        this.layout.addTitleHeader(this.title, this.font);
+        this.layout.addToHeader(new StringWidget(this.title, this.font));
 
         GridLayout grid = new GridLayout().spacing(2);
         GridLayout.RowHelper rows = grid.createRowHelper(5);
@@ -107,8 +105,7 @@ public class TextureBuilderConfigScreen extends Screen {
 
         this.layout.addToContents(grid);
 
-        LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
-        footer.addChild(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(120).build());
+        this.layout.addToFooter(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(120).build());
 
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
@@ -133,7 +130,7 @@ public class TextureBuilderConfigScreen extends Screen {
     @Override
     public void onClose() {
         ModConfig.get().save();
-        this.minecraft.gui.setScreen(this.parent);
+        this.minecraft.setScreen(this.parent);
     }
 
     private void refreshItemNames() {
@@ -247,9 +244,9 @@ public class TextureBuilderConfigScreen extends Screen {
     private AbstractWidget includedToggle(ModConfig config, int slot) {
         return CycleButton.<Boolean>builder(
                         value -> Component.translatable(value ? "text.texturebuilder.on" : "text.texturebuilder.off")
-                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED),
-                        config.included[slot])
+                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED))
                 .withValues(true, false)
+                .withInitialValue(config.included[slot])
                 .displayOnlyValue()
                 .create(0, 0, COL_INCLUDE, ROW_HEIGHT,
                         Component.translatable("text.texturebuilder.config.included"),
