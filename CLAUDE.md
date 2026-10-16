@@ -11,6 +11,36 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.1 backport (branch `1.21.1`, verified 2026-10-15)
+This branch targets **Minecraft 1.21.1 / Fabric API 0.116.17+1.21.1 / Java 21**; the 26.x notes
+below describe the `main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** Loom 1.17.21 via plugin id **`net.fabricmc.fabric-loom-remap`** (1.21.1 is
+  obfuscated), `mappings loom.officialMojangMappings()` so source stays Mojmap, `modImplementation`
+  / `modCompileOnly`, Loader 0.19.5 (build) with a `>=0.15.11` runtime floor (Fabric API
+  0.116.17's own floor), Mod Menu 11.0.3. No JDK 21 is installed on this machine, so the build
+  keeps the **JDK 25 toolchain with `options.release = 21`** (Java 21 bytecode, major 65, and
+  Java 21 API only); mixin `compatibilityLevel` is `JAVA_21`. Output is `remapJar` →
+  `build/libs/texture-builder - 1.21.1 - 1.0.1.jar`; the unremapped jar goes to `build/devlibs`
+  with a `-dev` classifier. No refmap — Loom rewrites mixin targets to intermediary in place.
+- **API mapping 26.x → 1.21.1:** `minecraft.gui.setScreen` → `minecraft.setScreen`;
+  `GuiGraphicsExtractor.text` → `GuiGraphics.drawString`; `HudElementRegistry` (Fabric API 1.21.6+)
+  → `HudRenderCallback` `(GuiGraphics, DeltaTracker)`; `KeyMappingHelper.registerKeyMapping` →
+  `KeyBindingHelper.registerKeyBinding` with category string `key.categories.gameplay`;
+  `ClientCommands` → `ClientCommandManager`; `Inventory.get/setSelectedSlot` → public field
+  `selected`; `CycleButton.builder(fn, initial)` → `builder(fn).withInitialValue(v)`;
+  direct-restock fallback `handlePickItemFromBlock(pos)` → vanilla survival pick
+  `handlePickItem(inventorySlot)`. Unlike 1.20.1, `HeaderAndFooterLayout.addTitleHeader` and
+  `LinearLayout.horizontal().spacing()` exist in 1.21.1 and are unchanged.
+- **Recipe-book reposition hook:** 1.21.1 has no `onRecipeBookButtonClick()`; the toggle logic is the
+  button lambda `method_19891` (unnamed in Mojmap, so the same name in dev and production) —
+  injected with `remap = false`. `InventoryScreen` extends `EffectRenderingInventoryScreen` here.
+- **Verified:** dev `runClient` and two production launches via a temporary Loom
+  `ClientProductionRunTask` (real Fabric Loader 0.19.5 + remapped jar + Fabric API 0.116.17) reach
+  the title screen. A temporary probe force-loaded `InventoryScreen`/`CreativeModeInventoryScreen`/
+  `MultiPlayerGameMode` (production: `class_490`/`class_481`/`class_636`) with all mixins applied.
+  The final, probe-free jar was launched on the launcher-bundled Java 21.0.7 runtime
+  (`java-runtime-delta`) to the title screen. Not verified: in-world gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
