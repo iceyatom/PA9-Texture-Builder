@@ -11,6 +11,35 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.2 backport (branch `1.21.2`, verified 2026-10-16)
+This branch targets **Minecraft 1.21.2 / Fabric API 0.106.1+1.21.2 / Java 21** and runs on
+**1.21.2 – 1.21.3** (`"minecraft": ">=1.21.2 <1.21.4-"`). The 26.x notes below describe the
+`main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** same recipe as the `1.21.1` branch: Loom 1.17.21 via plugin id
+  `net.fabricmc.fabric-loom-remap`, `mappings loom.officialMojangMappings()`, `modImplementation` /
+  `modCompileOnly`, JDK 25 toolchain with `options.release = 21`, mixin `compatibilityLevel`
+  `JAVA_21`. Loader 0.19.5 (build) with a `>=0.16.7` runtime floor (Fabric API 0.106.1's own
+  floor), Mod Menu 12.0.0. Output is `remapJar` → `build/libs/texture-builder - 1.21.2 - 1.0.1.jar`.
+- **API mapping 26.x → 1.21.2:** identical to the 1.21.1 table (`minecraft.setScreen`,
+  `GuiGraphics.drawString`, `HudRenderCallback`, `KeyBindingHelper` + `key.categories.gameplay`,
+  `ClientCommandManager`, `Inventory.selected`, `CycleButton.builder(fn).withInitialValue(v)`,
+  `handlePickItem(inventorySlot)`), **except the recipe book**: 1.21.2 introduced
+  `AbstractRecipeBookScreen`, and `InventoryScreen` declares `onRecipeBookButtonClick()` again, so
+  `InventoryScreenMixin` keeps the 26.x `@Inject(method = "onRecipeBookButtonClick")` (intermediary
+  `method_64510`) — the 1.21.1 `method_19891` lambda no longer exists. Inventory-screen and
+  recipe-button coordinates were re-checked against the 1.21.2 bytecode and are unchanged.
+- **Subversion range:** `subversion_compat.py` over 1.21.2 → 1.21.11: OK on 1.21.2 and 1.21.3;
+  1.21.4+ lacks `MultiPlayerGameMode.handlePickItem(int)` (`method_2916`); 1.21.6+ also lacks
+  `GuiGraphics.drawString(..., boolean)`; 1.21.11 also lacks `CycleButton.builder(Function)` /
+  `withInitialValue`.
+- **Verified:** dev `runClient` and a production launch (installed `fabric-loader-0.19.5-1.21.2`
+  profile, launcher Java 21) with a temporary probe force-loading `class_490`/`class_481`/`class_636`
+  — all mixins applied. The final probe-free jar launched to the title screen on 1.21.2 (Fabric API
+  0.106.1) and 1.21.3 (Fabric API 0.114.1); on 1.21.4 Loader shows "Incompatible mods found!" as
+  intended. The 1.21.2 vanilla jar was never downloaded into `versions/1.21.2/`; the launcher's
+  copy at `versions/fabric-loader-0.19.5-1.21.2/<id>.jar` (same SHA-1) was used instead. Not
+  verified: in-world gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
