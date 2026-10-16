@@ -23,7 +23,7 @@ import net.minecraft.world.entity.player.Inventory;
  * {@link CreativeModeInventoryScreen} and returns early, so the survival button never exists there.
  *
  * <p><b>What is intercepted and why</b> (NFR-10): all three injection targets are methods declared
- * on {@code CreativeModeInventoryScreen} itself (NFR-11, verified against the 26.3 bytecode). No
+ * on {@code CreativeModeInventoryScreen} itself (NFR-11, verified against the 26.3 and 1.21.4 bytecode). No
  * vanilla logic is cancelled or altered — the button is purely additive.
  *
  * <ul>
@@ -69,7 +69,7 @@ public abstract class CreativeModeInventoryScreenMixin
 		CreativeModeInventoryScreen self = (CreativeModeInventoryScreen) (Object) this;
 		texturebuilder$button = this.addRenderableWidget(Button.builder(
 						Component.translatable("text.texturebuilder.button"),
-						pressed -> this.minecraft.gui.setScreen(new TextureBuilderConfigScreen(self)))
+						pressed -> this.minecraft.setScreen(new TextureBuilderConfigScreen(self)))
 				.bounds(0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT)
 				.tooltip(Tooltip.create(Component.translatable("text.texturebuilder.button.tooltip")))
 				.build());

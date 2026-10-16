@@ -11,6 +11,37 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.4 backport (branch `1.21.4`, verified 2026-10-16)
+This branch targets **Minecraft 1.21.4 / Fabric API 0.119.4+1.21.4 / Java 21** and runs on
+**1.21.4 only** (`"minecraft": ">=1.21.4 <1.21.5-"`). The 26.x notes below describe the
+`main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** same recipe as the `1.21.2` branch: Loom 1.17.21 via plugin id
+  `net.fabricmc.fabric-loom-remap`, `mappings loom.officialMojangMappings()`, `modImplementation` /
+  `modCompileOnly`, JDK 25 toolchain with `options.release = 21`, mixin `compatibilityLevel`
+  `JAVA_21`. Loader 0.19.5 (build) with a `>=0.16.9` runtime floor (Fabric API 0.119.4's own
+  floor), Mod Menu 13.0.4. Output is `remapJar` → `build/libs/texture-builder - 1.21.4 - 1.0.1.jar`.
+- **API mapping 26.x → 1.21.4:** the 1.21.2 table (`minecraft.setScreen`, `GuiGraphics.drawString`,
+  `HudRenderCallback`, `KeyBindingHelper` + `key.categories.gameplay`, `ClientCommandManager`,
+  `Inventory.selected`, `CycleButton.builder(fn).withInitialValue(v)`, recipe-book hook
+  `onRecipeBookButtonClick` = `method_64510`), **except survival pick block**: 1.21.4 moved pick
+  block server-side and has `MultiPlayerGameMode.handlePickItemFromBlock(BlockPos, boolean)`, so
+  `attemptDirectRestock` uses the 26.x call again (1.21.2's `handlePickItem(int)` is gone). Every
+  mixin target was `javap`-checked as declared on its class; inventory/creative coordinates
+  (result slot 154,28; recipe button leftPos+104, height/2-22; shield 77,62; creative 54/6/27,
+  35/20, 173/112) are unchanged.
+- **Subversion range:** `subversion_compat.py` over 1.21.4 → 1.21.11 reports OK on 1.21.4 *and
+  1.21.5*, but **1.21.5 is a false positive**: 1.21.5 made `Inventory.selected` (`field_7545`)
+  **private** (added `getSelectedSlot`/`setSelectedSlot`), and the script compares names, not
+  access flags. The jar would load on 1.21.5 and then throw `IllegalAccessError` on the first
+  randomized placement. 1.21.6+ also lacks `GuiGraphics.drawString(..., boolean)`
+  (`method_51439`); 1.21.11 also lacks `CycleButton.builder(Function)` / `withInitialValue`.
+- **Verified:** dev `runClient` and a production launch (installed `fabric-loader-0.19.5-1.21.4`
+  profile, launcher Java 21) with a temporary probe force-loading `class_490`/`class_481`/`class_636`
+  — all mixins applied. The final probe-free jar launched to the title screen on 1.21.4; on 1.21.5
+  Loader shows "Incompatible mods found!" as intended. `versions/1.21.4/1.21.4.jar` does not exist
+  on this machine; the launcher's copy at `versions/fabric-loader-0.19.5-1.21.4/<id>.jar` was used.
+  Not verified: in-world gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
