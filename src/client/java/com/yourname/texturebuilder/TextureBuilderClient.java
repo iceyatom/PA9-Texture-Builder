@@ -77,7 +77,7 @@ public class TextureBuilderClient implements ClientModInitializer {
         active = ModConfig.get().enabled; // FR-03: OFF unless explicitly configured otherwise.
 
         // FR-01: unbound by default; bindable via the vanilla Controls screen or the TOML.
-        // Use Minecraft's own "unbound" sentinel (GLFW -1 on 1.21.1) rather than a literal.
+        // Use Minecraft's own "unbound" sentinel (GLFW -1 on 1.21) rather than a literal.
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.texturebuilder.toggle", InputConstants.UNKNOWN.getValue(), "key.categories.gameplay"));
 

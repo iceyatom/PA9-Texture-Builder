@@ -11,6 +11,33 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21 backport (branch `1.21`, cut from `1.21.1`, verified 2026-10-16)
+This branch targets **Minecraft 1.21 / Fabric API 0.102.0+1.21** (the newest Fabric API for 1.21;
+it declares `minecraft >=1.21- <1.21.1-`, loader `>=0.15.11`, java `>=21`). Behaviour is unchanged
+from the 1.21.1 branch below, and **no Java code changed**: every API and mixin target the 1.21.1
+port uses has the same signature in 1.21 (javap-verified: `InventoryScreen.init/containerTick/
+method_19891`, `CreativeModeInventoryScreen.init/selectTab/containerTick/isInventoryOpen`,
+`MultiPlayerGameMode.useItemOn/handlePickItem/handleCreativeModeItemAdd`, `Inventory.selected`,
+`HeaderAndFooterLayout.addTitleHeader`; `method_19891` is still the recipe-book toggle lambda that
+reassigns `leftPos`). Only `gradle.properties` (`minecraft_version=1.21`,
+`fabric_api_version=0.102.0+1.21`), `fabric.mod.json` depends (`fabric-api >=0.102.0`,
+`minecraft >=1.21 <1.21.2-`) and version-naming comments changed.
+- **Why the range stops at 1.21.1:** `~1.21` let Loader start the jar on 1.21.11, which crashed
+  (`InvalidInjectionException: could not find any targets matching 'method_19891' in class_490`).
+  A static check of every Minecraft reference in the remapped jar against the real client jars
+  for 1.21–1.21.11 found these breaks: 1.21.2+ removes the recipe-book lambda `method_19891`
+  (hard crash); 1.21.4+ removes `handlePickItem(int)` (`method_2916`); 1.21.6+ changes
+  `GuiGraphics.drawString(..)` (`method_51439`) so it no longer returns `int`; 1.21.11 changes
+  `CycleButton.builder(Function)` (`method_32606`). The trailing `-` in `<1.21.2-` also excludes
+  1.21.2 pre-releases. Launch-verified: loads on 1.21, and 1.21.11 gets Loader's
+  "Incompatible mods found!" screen instead of a crash. Toolchain is otherwise identical (Loom
+remap plugin, Mojmap, Loader 0.19.5 build / 0.15.11 floor, Mod Menu 11.0.3, JDK 25 `release 21`).
+Output: `build/libs/texture-builder - 1.21 - 1.0.1.jar`.
+- **Verified:** dev `runClient` (Loader 0.19.5) and production launches with the user's installed
+  `fabric-loader-0.18.4-1.21` profile via `prodlaunch.py` on the launcher's Java 21 runtime, isolated
+  game dir. Probe loaded `class_490`/`class_481`/`class_636` with all mixins applied, zero mixin
+  errors; the final probe-free jar reached the title screen. Not verified: in-world gameplay.
+
 ## 1.21.1 backport (branch `1.21.1`, verified 2026-10-15)
 This branch targets **Minecraft 1.21.1 / Fabric API 0.116.17+1.21.1 / Java 21**; the 26.x notes
 below describe the `main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.

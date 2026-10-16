@@ -1,6 +1,6 @@
 # PA9 Texture Builder
 
-A **client-side Fabric mod** for **Minecraft Java Edition 1.21.1** that automates block variation
+A **client-side Fabric mod** for **Minecraft Java Edition 1.21** that automates block variation
 while building by hand. When toggled ON, each block placement first silently switches the active
 hotbar slot to one chosen by **weighted random selection** from a configurable pool of hotbar
 slots; vanilla placement then proceeds exactly as if you had pressed that number key, and your
@@ -14,19 +14,19 @@ source refer to that document.
 
 | Item | Version |
 |---|---|
-| Minecraft | Java Edition 1.21.1 |
+| Minecraft | Java Edition 1.21 |
 | Fabric Loader | 0.15.11+ |
-| Fabric API | 0.116.17+1.21.1 or later for Minecraft 1.21.1 (in `.minecraft/mods/`) |
+| Fabric API | 0.102.0+1.21 or later for Minecraft 1.21 (in `.minecraft/mods/`) |
 | Java | 21 to play (bundled with the launcher); JDK 25 to build (compiles with `--release 21`) |
 | Mod Menu | optional — adds a gear shortcut to the config screen |
 
 ## Install
 
-1. Install Fabric Loader for Minecraft 1.21.1 via the Fabric installer.
-2. Put **Fabric API 0.116.17+1.21.1** (or later for Minecraft 1.21.1) in `.minecraft/mods/`.
-3. Put **`texture-builder - 1.21.1 - 1.0.1.jar`** (from `build/libs/`) in `.minecraft/mods/`.
-4. (Optional) add Mod Menu (11.0.x for 1.21.1).
-5. Launch the `fabric-loader-…-1.21.1` profile.
+1. Install Fabric Loader for Minecraft 1.21 via the Fabric installer.
+2. Put **Fabric API 0.102.0+1.21** (or later for Minecraft 1.21) in `.minecraft/mods/`.
+3. Put **`texture-builder - 1.21 - 1.0.1.jar`** (from `build/libs/`) in `.minecraft/mods/`.
+4. (Optional) add Mod Menu (11.0.x for 1.21).
+5. Launch the `fabric-loader-…-1.21` profile.
 
 ## Use
 
@@ -65,7 +65,7 @@ placement, and restock uses the exact packets a manual player would generate; no
 cd texturebuilder
 # needs JDK 25 installed (Gradle toolchain); javac targets Java 21 via --release 21
 gradlew.bat build    # Windows (./gradlew build on macOS/Linux)
-# Output: build/libs/texture-builder - 1.21.1 - 1.0.1.jar
+# Output: build/libs/texture-builder - 1.21 - 1.0.1.jar
 ```
 
 See `CLAUDE.md` for build-environment findings (notably: **no Yarn mappings exist for 26.x** —

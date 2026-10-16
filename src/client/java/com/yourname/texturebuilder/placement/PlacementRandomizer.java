@@ -293,7 +293,7 @@ public final class PlacementRandomizer {
             gameMode.handleCreativeModeItemAdd(refill, 36 + p.pickSlot());
             return;
         }
-        // 1.21.1 vanilla survival pick block: the client finds the item and asks the server to
+        // 1.21 vanilla survival pick block: the client finds the item and asks the server to
         // move that inventory slot into the hotbar; the server targets the selected (depleted) slot.
         int match = findMainInventoryMatch(inventory, item, p.pickSlot());
         if (match >= 0 && findPlacedBlock(client, p.hit(), item) != null) {

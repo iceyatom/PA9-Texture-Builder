@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
  * No persistent HUD overlay is ever rendered (FR-02, SRS §10).
  *
  * <p>Mirrors ShulkerPickBlock's {@code PickBlockHud}: drawn from a Fabric {@code HudRenderCallback}
- * (the 1.21.1 equivalent of the 26.x {@code HudElementRegistry} element, which Fabric API only
+ * (the 1.21 equivalent of the 26.x {@code HudElementRegistry} element, which Fabric API only
  * added in 1.21.6), so it looks identical to the 26.x release. State is a countdown driven by the
  * client tick; client-thread only, so no synchronisation is needed.
  */

@@ -41,9 +41,9 @@ loom {
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
-	// 1.21.1 jars are obfuscated, so Loom remaps them. Official Mojang mappings keep the
+	// 1.21 jars are obfuscated, so Loom remaps them. Official Mojang mappings keep the
 	// source on the same Mojmap names as the 26.x branches (the jar is remapped to
-	// intermediary on build, as every 1.21.1 Fabric mod is).
+	// intermediary on build, as every 1.21 Fabric mod is).
 	mappings loom.officialMojangMappings()
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
@@ -56,7 +56,7 @@ dependencies {
 }
 
 java {
-	// MC 1.21.1 targets Java 21. The build runs on the JDK 25 toolchain installed on this
+	// MC 1.21 targets Java 21. The build runs on the JDK 25 toolchain installed on this
 	// machine (no JDK 21 is installed), and `release = 21` below makes javac emit Java 21
 	// bytecode and reject any API newer than Java 21, so the output is the same as a JDK 21 build.
 	toolchain {

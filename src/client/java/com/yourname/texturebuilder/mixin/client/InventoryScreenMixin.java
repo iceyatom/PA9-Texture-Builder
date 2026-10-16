@@ -31,7 +31,7 @@ import net.minecraft.world.inventory.InventoryMenu;
  *       final return TAIL binds to is the survival path, immediately after
  *       the recipe book has positioned the panel.</li>
  *   <li>The recipe book button's press lambda at TAIL — repositions on recipe book toggle (see
- *       the layout note below). 1.21.1 has no {@code onRecipeBookButtonClick()}; the toggle logic
+ *       the layout note below). 1.21 has no {@code onRecipeBookButtonClick()}; the toggle logic
  *       lives in that lambda, which Mojang's mappings leave unnamed, so it keeps its intermediary
  *       name {@code method_19891} in both dev and production (hence {@code remap = false}).</li>
  *   <li>{@code containerTick()} at TAIL — a cheap per-tick safety net that re-asserts the position
@@ -48,7 +48,7 @@ import net.minecraft.world.inventory.InventoryMenu;
  * the JVM looks up normally, so no {@code @Shadow} is needed at all. {@code AbstractContainerScreen}
  * is a valid choice because it is in {@code InventoryScreen}'s hierarchy
  * ({@code InventoryScreen} → {@code EffectRenderingInventoryScreen} → {@code AbstractContainerScreen}
- * on 1.21.1).
+ * on 1.21).
  * This mixin never calls {@code super.*}, so the non-direct superclass is safe.
  *
  * <p><b>Why the position must be re-asserted, not just set once:</b> opening the recipe book
