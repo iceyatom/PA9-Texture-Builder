@@ -11,6 +11,31 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.5 backport (branch `1.21.5`, verified 2026-10-16)
+This branch targets **Minecraft 1.21.5 / Fabric API 0.128.2+1.21.5 / Java 21** and runs on
+**1.21.5 only** (`"minecraft": ">=1.21.5 <1.21.6-"`). The 26.x notes below describe the
+`main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** same recipe as the `1.21.4` branch (Loom 1.17.21, plugin id
+  `net.fabricmc.fabric-loom-remap`, `mappings loom.officialMojangMappings()`, `modImplementation` /
+  `modCompileOnly`, JDK 25 toolchain with `options.release = 21`, mixin `JAVA_21`). Loader 0.19.5
+  (build) with a `>=0.16.10` runtime floor (Fabric API 0.128.2's own floor), Mod Menu 14.0.2
+  (declares `>=1.21.5 <1.21.6`). Output is `remapJar` → `build/libs/texture-builder - 1.21.5 - 1.0.1.jar`.
+- **API mapping 26.x → 1.21.5:** the 1.21.4 table (`minecraft.setScreen`, `GuiGraphics.drawString`,
+  `HudRenderCallback`, `KeyBindingHelper` + `key.categories.gameplay`, `ClientCommandManager`,
+  `CycleButton.builder(fn).withInitialValue(v)`, `handlePickItemFromBlock`, recipe-book hook
+  `method_64510`), **except the selected slot**: 1.21.5 made `Inventory.selected` private and added
+  `getSelectedSlot()`/`setSelectedSlot(int)`, so `PlacementRandomizer` keeps the 26.x calls
+  unchanged. `HudRenderCallback` is deprecated in this Fabric API (javac note) but still fires; the
+  replacement `HudLayerRegistrationCallback` has no held-item-tooltip anchor to match 26.x's
+  `attachElementBefore(HELD_ITEM_TOOLTIP)`, so the 1.21.4 approach was kept.
+- **Subversion range** (`subversion_compat.py`, with the access-flag check): 1.21.5 OK; 1.21.6–1.21.10
+  FAIL on `GuiGraphics.drawString(..., boolean)` (`method_51439`); 1.21.11 also on
+  `CycleButton.builder(Function)` / `withInitialValue`.
+- **Verified:** dev `runClient` and a production launch (installed `fabric-loader-0.19.5-1.21.5`
+  profile, launcher Java 21) with a temporary probe force-loading `class_490`/`class_481`/`class_636`
+  — all mixins applied. The final probe-free jar launched to the title screen on 1.21.5.
+  Not verified: in-world gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
