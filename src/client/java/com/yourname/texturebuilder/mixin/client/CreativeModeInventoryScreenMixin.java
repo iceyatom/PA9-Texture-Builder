@@ -23,7 +23,7 @@ import net.minecraft.world.entity.player.Inventory;
  * {@link CreativeModeInventoryScreen} and returns early, so the survival button never exists there.
  *
  * <p><b>What is intercepted and why</b> (NFR-10): all three injection targets are methods declared
- * on {@code CreativeModeInventoryScreen} itself (NFR-11, verified against the 26.3 and 1.21.5 bytecode). No
+ * on {@code CreativeModeInventoryScreen} itself (NFR-11, verified against the 26.3 and 1.21.6 bytecode). No
  * vanilla logic is cancelled or altered — the button is purely additive.
  *
  * <ul>

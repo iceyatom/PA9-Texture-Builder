@@ -20,7 +20,7 @@ import net.minecraft.world.inventory.InventoryMenu;
  * Adds the TextureBuilder button to the vanilla player inventory screen (FR-05/FR-06).
  *
  * <p><b>What is intercepted and why</b> (NFR-10): all three injection targets are methods declared
- * on {@link InventoryScreen} itself (NFR-11, verified against the 26.2 and 1.21.5 bytecode), exactly as SRS
+ * on {@link InventoryScreen} itself (NFR-11, verified against the 26.2 and 1.21.6 bytecode), exactly as SRS
  * §7.2 prescribes. No vanilla logic is cancelled or altered — the button is purely additive, and
  * nothing here overlaps ContainerSort's targets, so the two mods cannot conflict (NFR-09).
  *

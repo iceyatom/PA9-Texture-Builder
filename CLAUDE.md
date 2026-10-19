@@ -11,6 +11,31 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.6 backport (branch `1.21.6`, cut from `1.21.5`, verified 2026-10-16)
+This branch targets **Minecraft 1.21.6 / Fabric API 0.128.2+1.21.6 / Java 21** and runs on
+**1.21.6 – 1.21.8** (`"minecraft": ">=1.21.6 <1.21.9-"`). Behaviour is unchanged.
+- **Toolchain:** the `1.21.5` recipe with new pins: Fabric API 0.128.2+1.21.6 (its loader floor
+  `>=0.16.13` is the runtime floor), Mod Menu 15.0.2. Output is `remapJar` →
+  `build/libs/texture-builder - 1.21.6 - 1.0.1.jar`.
+- **API mapping vs 1.21.5:** only one change — 1.21.6's Fabric API added `HudElementRegistry` /
+  `VanillaHudElements.HELD_ITEM_TOOLTIP`, so the HUD goes back to the 26.x registration
+  (`attachElementBefore(HELD_ITEM_TOOLTIP, ResourceLocation.fromNamespaceAndPath(...))`) instead of
+  the deprecated `HudRenderCallback`. Everything else (incl. `GuiGraphics.drawString(..., boolean)`,
+  `KeyBindingHelper` + string category, recipe-book hook `method_64510`) compiles as-is. All five
+  mixin injection targets `javap`-verified as declared on their targets in 1.21.6.
+- **Subversion range:** 1.21.6–1.21.8 OK. 1.21.9+ FAIL: `KeyMapping(String, int, String)`
+  (`class_304.<init>`) was replaced by a `KeyMapping.Category` constructor → `NoSuchMethodError` in
+  `onInitializeClient` (reproduced by a real launch on 1.21.10 with the range widened). 1.21.11
+  also fails on `CycleButton.builder(Function)` / `withInitialValue`. NB: `subversion_compat.py`
+  originally reported 1.21.9/1.21.10 as OK — it searched for constructors up the superclass
+  chain and counted a miss at `java/lang/Object` as "inherited-from-JDK, not checked". Fixed the
+  same day (constructors are now declared-only).
+- **Verified:** dev `runClient` + production launch on 1.21.6 (`fabric-loader-0.19.5-1.21.6`) with a
+  temporary probe force-loading `class_490`/`class_481`/`class_636` — all mixins applied. Final
+  probe-free jar launched to the title screen on 1.21.6 and 1.21.8 (with Fabric API
+  0.136.1+1.21.8); on 1.21.10 Loader shows "Incompatible mods found!" as intended.
+  Not verified: in-world gameplay; mixin application on 1.21.7/1.21.8 is static-check only.
+
 ## 1.21.5 backport (branch `1.21.5`, verified 2026-10-16)
 This branch targets **Minecraft 1.21.5 / Fabric API 0.128.2+1.21.5 / Java 21** and runs on
 **1.21.5 only** (`"minecraft": ">=1.21.5 <1.21.6-"`). The 26.x notes below describe the

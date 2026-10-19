@@ -11,10 +11,10 @@ import net.minecraft.network.chat.Component;
  * the ON/OFF toggle confirmation (FR-02) and the "no more blocks found" restock notice (FR-15).
  * No persistent HUD overlay is ever rendered (FR-02, SRS §10).
  *
- * <p>Mirrors ShulkerPickBlock's {@code PickBlockHud}: drawn from a Fabric {@code HudRenderCallback}
- * (the 1.21.5 equivalent of the 26.x {@code HudElementRegistry} element, which Fabric API only
- * added in 1.21.6), so it looks identical to the 26.x release. State is a countdown driven by the
- * client tick; client-thread only, so no synchronisation is needed.
+ * <p>Mirrors ShulkerPickBlock's {@code PickBlockHud}: drawn from a Fabric {@code HudElementRegistry}
+ * element layered just before the held-item tooltip, exactly as in the 26.x release (1.21.6 is the
+ * first version whose Fabric API has that registry). State is a countdown driven by the client
+ * tick; client-thread only, so no synchronisation is needed.
  */
 public final class TextureBuilderHud {
     private static Component message;
