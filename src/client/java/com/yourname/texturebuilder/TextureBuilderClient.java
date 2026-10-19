@@ -9,13 +9,13 @@ import com.yourname.texturebuilder.placement.PlacementRandomizer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Client entrypoint (declared under {@code entrypoints.client} in {@code fabric.mod.json}).
@@ -79,8 +79,8 @@ public class TextureBuilderClient implements ClientModInitializer {
         active = ModConfig.get().enabled; // FR-03: OFF unless explicitly configured otherwise.
 
         // FR-01: unbound by default; bindable via the vanilla Controls screen or the TOML.
-        // Use Minecraft's sentinel: 26.3 uses SDL's 0, and the old GLFW -1 crashes on focus.
-        toggleKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+        // Use Minecraft's own "unbound" sentinel (GLFW -1 on 1.21.9) rather than a literal.
+        toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.texturebuilder.toggle", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.GAMEPLAY));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
@@ -102,7 +102,7 @@ public class TextureBuilderClient implements ClientModInitializer {
 
         HudElementRegistry.attachElementBefore(
                 VanillaHudElements.HELD_ITEM_TOOLTIP,
-                Identifier.fromNamespaceAndPath(TextureBuilder.MOD_ID, "messages"),
+                ResourceLocation.fromNamespaceAndPath(TextureBuilder.MOD_ID, "messages"),
                 (context, tickCounter) -> TextureBuilderHud.render(context));
 
         TextureBuilder.LOGGER.info("{} initialised (client-side only; {}).",TextureBuilder.MOD_NAME,

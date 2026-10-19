@@ -11,6 +11,36 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.9 backport (branch `1.21.9`, cut from `main` = 26.3, verified 2026-10-19)
+This branch targets **Minecraft 1.21.9 / Fabric API 0.134.1+1.21.9 / Java 21** and runs on
+**1.21.9 – 1.21.10** (`"minecraft": ">=1.21.9 <1.21.11-"`). The 26.x notes below describe the
+`main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** same recipe as the `1.21.6` branch (Loom 1.17.21, plugin id
+  `net.fabricmc.fabric-loom-remap`, `mappings loom.officialMojangMappings()`, `modImplementation` /
+  `modCompileOnly`, JDK 25 toolchain with `options.release = 21`, mixin `JAVA_21`, `remapJar` naming
+  with the plain jar as `-dev`). Loader 0.19.5 (build) with a `>=0.17.0` runtime floor (Fabric API
+  0.134.1's own floor), Mod Menu 16.0.1 (declares `>=1.21.9- <1.21.11`). Output:
+  `build/libs/texture-builder - 1.21.9 - 1.0.1.jar`.
+- **API mapping 26.3 → 1.21.9** (all `javap`-verified): `Identifier` → `ResourceLocation`;
+  `GuiGraphicsExtractor.text` → `GuiGraphics.drawString(..., boolean)`; `minecraft.gui.setScreen` →
+  `minecraft.setScreen`; `ClientCommands` → `ClientCommandManager`; `KeyMappingHelper.registerKeyMapping`
+  → `KeyBindingHelper.registerKeyBinding`; `CycleButton.builder(fn, initial)` →
+  `builder(fn).withInitialValue(initial)`. **Unlike 1.21.6, the `KeyMapping(String, int,
+  KeyMapping.Category)` constructor and `Category.GAMEPLAY` already exist in 1.21.9**, so the 26.x
+  keybind call is kept. HUD uses `HudElementRegistry.attachElementBefore(HELD_ITEM_TOOLTIP, ...)`
+  as in 26.x. All mixin targets (`InventoryScreen.init/onRecipeBookButtonClick/containerTick`,
+  `CreativeModeInventoryScreen.init/selectTab/containerTick`, `MultiPlayerGameMode.useItemOn`) are
+  declared on their classes in 1.21.9; no `remap = false` lambda hooks needed.
+- **Subversion range** (`subversion_compat.py`): 1.21.9 OK, 1.21.10 OK (Fabric API 0.138.4+1.21.10),
+  1.21.11 FAIL on `CycleButton.builder(Function)` (`method_32606`) / `withInitialValue`
+  (`method_32619`).
+- **Verified:** dev `runClient` + production launch on 1.21.9 (`fabric-loader-0.19.5-1.21.9`) with a
+  temporary probe force-loading `class_490`/`class_481`/`class_636` — all mixins applied. The final
+  probe-free jar launched to the title screen on 1.21.9 and 1.21.10 (1.21.10 via a scratch
+  `--mc-dir`: the vanilla 1.21.10 client jar isn't installed, so Mojang's jar from the compat cache,
+  SHA-1 checked against the version JSON), plus a probe run on 1.21.10. On 1.21.11 Loader shows
+  "Incompatible mods found!" as intended. Not verified: in-world gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
