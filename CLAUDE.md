@@ -11,6 +11,35 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.21.11 backport (branch `1.21.11`, cut from `main` = 26.3, verified 2026-10-19)
+This branch targets **Minecraft 1.21.11 / Fabric API 0.141.6+1.21.11 / Java 21** and runs on
+**1.21.11 only** (`"minecraft": ">=1.21.11 <1.21.12-"`). The 26.x notes below describe the
+`main`/`26.3-Release` branches and stay as history. Behaviour is unchanged.
+- **Toolchain:** same recipe as the `1.21.9` branch (Loom 1.17.21, plugin id
+  `net.fabricmc.fabric-loom-remap`, `mappings loom.officialMojangMappings()`, `modImplementation` /
+  `modCompileOnly`, JDK 25 toolchain with `options.release = 21`, mixin `JAVA_21`, `remapJar` naming
+  with the plain jar as `-dev`). Loader 0.19.5 (build) with a `>=0.17.3` runtime floor (Fabric API
+  0.141.6's own floor), Mod Menu 17.0.1 (declares `>=1.21.11 <26`). Output:
+  `build/libs/texture-builder - 1.21.11 - 1.0.1.jar`.
+- **API mapping 26.3 -> 1.21.11** (all `javap`-verified): `GuiGraphicsExtractor.text` ->
+  `GuiGraphics.drawString(..., boolean)`; `minecraft.gui.setScreen` -> `minecraft.setScreen`;
+  `ClientCommands` -> `ClientCommandManager`; `KeyMappingHelper.registerKeyMapping` ->
+  `KeyBindingHelper.registerKeyBinding`. **Unlike 1.21.9, 1.21.11 already has `Identifier` and the
+  26.x `CycleButton.builder(Function, T)` factory**, so both 26.x calls are kept. HUD uses
+  `HudElementRegistry.attachElementBefore(HELD_ITEM_TOOLTIP, ...)` as in 26.x. All mixin targets
+  (`InventoryScreen.init/onRecipeBookButtonClick/containerTick`,
+  `CreativeModeInventoryScreen.init/selectTab/containerTick`, `MultiPlayerGameMode.useItemOn`) are
+  declared on their classes in 1.21.11; no `remap = false` lambda hooks needed.
+- **Subversion range** (`subversion_compat.py`, 1.21 -> 1.21.11): only 1.21.11 OK. 1.21.9/1.21.10
+  FAIL on `CycleButton.builder(Function, Object)` (`method_32606`); 1.21.6-1.21.8 also on the
+  `KeyMapping(String,int,Category)` ctor; <=1.21.5 also on `HudElementRegistry`. The next release
+  after 1.21.11 is 26.1 (unobfuscated, no intermediary), so the range cannot extend upward.
+- **Verified:** dev `runClient` + production launch on 1.21.11 (`fabric-loader-0.19.5-1.21.11`,
+  launcher Java 21.0.7) with a temporary probe force-loading `class_490`/`class_481`/`class_636` -
+  all mixins applied, no mixin errors. The final probe-free jar launched to the title screen on
+  1.21.11. On 1.21.10 Loader shows "Incompatible mods found!" as intended. Not verified: in-world
+  gameplay.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
