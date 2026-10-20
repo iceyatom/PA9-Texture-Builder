@@ -11,6 +11,29 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.19.3 backport (branch `1.19.3`, verified 2026-10-19)
+This branch targets **Minecraft 1.19.3 / Fabric API 0.76.1+1.19.3 / Java 17**; the 26.x notes below
+describe `main` and stay as history. Behaviour is unchanged. Starts from the `1.20` port
+(`minecraft.setScreen`, `HudRenderCallback`, `KeyBindingHelper` + `"key.categories.gameplay"`,
+`ClientCommandManager`, `Inventory.selected`, `Button.builder`/`Tooltip`/`setPosition`,
+`isInventoryOpen()`, `CycleButton.builder(fn).withInitialValue`, `handlePickItem(slot)`, recipe-book
+lambda `method_19891` with `remap = false`), plus what 1.19.3 lacks:
+- **No `GuiGraphics`:** HUD draws with `font.drawShadow(PoseStack, ..)`, size from
+  `getWindow().getGuiScaledWidth/Height()`; `HudRenderCallback` passes a `PoseStack`.
+- **No `StringWidget`/`GridLayout`/`HeaderAndFooterLayout`/`repositionElements()`:** same hand-placed
+  layout as the `1.19` branch (metrics from the 1.20 bytecode: 36px header/footer, grid 30px below the
+  header, 2px spacing, centred labels), with a private `Label` widget for `StringWidget`
+  (`updateWidgetNarration` is the 1.19.3 narration hook). Tooltips use the real `Tooltip` API.
+- **Toolchain:** Loom 1.17.21 `net.fabricmc.fabric-loom-remap`, `loom.officialMojangMappings()`,
+  Mod Menu 5.1.0 (compile-only), JDK 17, loader floor `>=0.14.10` (Fabric API 0.76.1's).
+- **Range `>=1.19.3 <1.19.4-`:** 1.19.4 moved `setPosition(int,int)` to the new `LayoutElement`
+  interface (`class_4185.method_1893` is gone), so the inventory button would throw
+  `NoSuchMethodError`.
+- **Verified:** production launch (scratch launcher dir, JDK 17) to the title screen on 1.19.3
+  (fabric-api-0.76.1+1.19.3), a probe force-loading `class_490`/`class_481`/`class_636` (all mixins
+  applied); on 1.19.4 (0.87.2+1.19.4) the `setPosition` member probe fails, and the final jar is
+  refused by Loader's "Incompatible mods found!" screen.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
