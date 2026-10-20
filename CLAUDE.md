@@ -77,6 +77,23 @@ then `gradlew runClient` and grep `run/logs/latest.log` for `Mixin apply for mod
 Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.log`, plus rotated
 `*.log.gz`); an early mixin crash produces a suspiciously small (~4KB) gz log.
 
+## Minecraft 26.2 backdate (branch `26.2`, 2026-10-19)
+
+Branch `26.2` is main (26.3) retargeted to Minecraft 26.2. **No source changes** — every API the
+mod uses (incl. all mixin targets) is identical in 26.2; only build/dependency pins differ.
+
+- Pins: Minecraft 26.2, Fabric API **0.161.0+26.2** (newest for 26.2), Loader 0.19.5 (newest
+  stable), Loom 1.17.21, Gradle 9.6.0, Mod Menu 20.0.3 (compile-only), JDK 25 / `JAVA_25`.
+- `fabric.mod.json`: `"minecraft": "26.2"` (exact), `fabric-api >=0.161.0`, `fabricloader >=0.19.5`.
+- Mixin targets checked with `javap -p` on the 26.2 deobf jars: `InventoryScreen.init /
+  onRecipeBookButtonClick / containerTick`, `CreativeModeInventoryScreen.init / selectTab /
+  containerTick`, `MultiPlayerGameMode.useItemOn` — all declared, same signatures.
+- `InputConstants.UNKNOWN.getValue()` (added for 26.3) compiles on 26.2 and is still the
+  vanilla "unbound" sentinel there, so it was kept.
+- Verified: `gradlew build` clean; production launch (KnotClient, Loader 0.19.5, Fabric API
+  0.161.0+26.2, JDK 25) to the title screen with all three mixin target classes force-loaded
+  and no mixin errors, then the final probe-free jar launched again. In-world gameplay not tested.
+
 ## Architecture (all under `src/client/java/com/yourname/texturebuilder/`)
 - `TextureBuilder` — mod id / name / logger constants, `HOTBAR_SIZE`.
 - `TextureBuilderClient` — `ClientModInitializer`; loads config, session ON/OFF state (FR-03:
