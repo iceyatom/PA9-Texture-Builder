@@ -11,6 +11,23 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.19.4 backport (branch `1.19.4`, verified 2026-10-19)
+This branch targets **Minecraft 1.19.4 / Fabric API 0.87.2+1.19.4 / Java 17**; the 26.x notes below
+describe `main` and stay as history. Behaviour is unchanged. Source is the `1.20` port
+(`minecraft.setScreen`, `HudRenderCallback`, `KeyBindingHelper` + `"key.categories.gameplay"`,
+`ClientCommandManager`, `Inventory.selected`, `addToHeader(new StringWidget(..))`,
+`CycleButton.builder(fn).withInitialValue`, `handlePickItem(slot)`, recipe-book lambda
+`method_19891` with `remap = false`) with one change: 1.19.4 has no `GuiGraphics`, so the HUD draws
+with `font.drawShadow(PoseStack, ..)` and takes its size from `getWindow().getGuiScaledWidth/Height()`
+(`HudRenderCallback` passes a `PoseStack`). The config screen's `StringWidget`/`GridLayout`/
+`HeaderAndFooterLayout` code compiles unchanged.
+- **Toolchain:** Loom 1.17.21 `net.fabricmc.fabric-loom-remap`, `loom.officialMojangMappings()`,
+  Mod Menu 6.3.1 (compile-only), JDK 17, loader floor `>=0.14.21` (Fabric API 0.87.2's).
+- **Range `>=1.19.4 <=1.19.4`** (1.19.4 is the last 1.19.x release).
+- **Verified:** production launch (scratch launcher dir, JDK 17) to the title screen on 1.19.4
+  (fabric-api-0.87.2+1.19.4) with a probe force-loading `class_490`/`class_481`/`class_636` (all
+  mixins applied), then the final probe-free jar again.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
