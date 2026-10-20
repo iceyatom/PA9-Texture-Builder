@@ -88,7 +88,7 @@ public abstract class InventoryScreenMixin extends AbstractContainerScreen<Inven
 		InventoryScreen self = (InventoryScreen) (Object) this;
 		texturebuilder$button = this.addRenderableWidget(Button.builder(
 						Component.translatable("text.texturebuilder.button"),
-						pressed -> this.minecraft.gui.setScreen(new TextureBuilderConfigScreen(self)))
+						pressed -> this.minecraft.setScreen(new TextureBuilderConfigScreen(self)))
 				.bounds(0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT)
 				.tooltip(Tooltip.create(Component.translatable("text.texturebuilder.button.tooltip")))
 				.build());

@@ -133,7 +133,7 @@ public class TextureBuilderConfigScreen extends Screen {
     @Override
     public void onClose() {
         ModConfig.get().save();
-        this.minecraft.gui.setScreen(this.parent);
+        this.minecraft.setScreen(this.parent);
     }
 
     private void refreshItemNames() {

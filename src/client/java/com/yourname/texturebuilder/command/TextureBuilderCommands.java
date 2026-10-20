@@ -41,7 +41,7 @@ public final class TextureBuilderCommands {
                             // Deferred to the next client tick: the chat screen is still being
                             // closed as the command runs, and it would overwrite our screen.
                             Minecraft client = Minecraft.getInstance();
-                            client.execute(() -> client.gui.setScreen(
+                            client.execute(() -> client.setScreen(
                                     new TextureBuilderConfigScreen(null)));
                             return 1;
                         }))

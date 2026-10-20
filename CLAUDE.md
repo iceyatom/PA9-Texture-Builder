@@ -32,8 +32,8 @@ and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
     `getPlayerMode()`.
   - `Inventory.getSelectedSlot()/setSelectedSlot(int)/getItem/setItem`, `INVENTORY_SIZE`,
     `SELECTION_SIZE`; `ServerboundSetCarriedItemPacket`.
-  - Screens open via **`minecraft.gui.setScreen(...)`** (`Minecraft.setScreen` doesn't exist in
-    26.x). HUD text drawn via Fabric `HudElementRegistry` + `GuiGraphicsExtractor.text(...)`
+  - Screens open via **`minecraft.setScreen(...)`** on this branch: 26.1.x still has
+    `Minecraft.setScreen`; 26.2+ moved it to `minecraft.gui.setScreen(...)`. HUD text drawn via Fabric `HudElementRegistry` + `GuiGraphicsExtractor.text(...)`
     (`displayClientMessage` is absent from the 26.x mapping — same approach as ShulkerPickBlock).
   - **`EditBox.setFilter` was removed in 26.2** (the one compile error hit). Replaced with
     `setMaxLength(4)` + digit-stripping inside `setResponder` (re-entrant `setValue` settles once
@@ -76,6 +76,26 @@ then `gradlew runClient` and grep `run/logs/latest.log` for `Mixin apply for mod
 / `InvalidMixinException`. Remove the temp block before the release build.
 Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.log`, plus rotated
 `*.log.gz`); an early mixin crash produces a suspiciously small (~4KB) gz log.
+
+## Minecraft 26.1 backdate (branch `26.1`, 2026-10-19)
+
+Branch `26.1` is main (26.3) retargeted to Minecraft 26.1. One jar,
+`texture-builder - 26.1 - 1.0.1.jar`, covers **26.1, 26.1.1 and 26.1.2**.
+
+- Pins: Minecraft 26.1, Fabric API **0.145.1+26.1** (newest for 26.1), Loader 0.19.5, Loom
+  1.17.21, Gradle 9.6.0, Mod Menu 18.0.2 (compile-only), JDK 25 / `JAVA_25`.
+- `fabric.mod.json`: `"minecraft": ">=26.1 <=26.1.2"`, `fabric-api >=0.145.1` (below the newest
+  builds for 26.1.1 = 0.145.4 and 26.1.2 = 0.155.3), `fabricloader >=0.19.5`.
+- Only source change: **`Minecraft.gui.setScreen(Screen)` -> `Minecraft.setScreen(Screen)`** at
+  all four call sites (26.2 moved the method from `Minecraft` to `Gui`; same method, same
+  behaviour). Everything else, including all mixin targets (`InventoryScreen.init /
+  onRecipeBookButtonClick / containerTick`, `CreativeModeInventoryScreen.init / selectTab /
+  containerTick`, `MultiPlayerGameMode.useItemOn`), is unchanged in 26.1 (checked with `javap -p`).
+- Verified: `gradlew build` clean; static member/mixin check OK on 26.1, 26.1.1, 26.1.2;
+  production launch (KnotClient, Loader 0.19.5, JDK 25) to the title screen on all three, with
+  each version's own Fabric API (0.145.1+26.1, 0.145.4+26.1.1, 0.155.3+26.1.2), the three mixin
+  target classes force-loaded and `Minecraft.setScreen` checked by reflection, no mixin errors.
+  The final probe-free jar was launched again on all three. In-world gameplay not tested.
 
 ## Architecture (all under `src/client/java/com/yourname/texturebuilder/`)
 - `TextureBuilder` — mod id / name / logger constants, `HOTBAR_SIZE`.
@@ -190,7 +210,7 @@ malilib's own lang file, and green-for-on/red-for-off is the universal conventio
 - `hud/TextureBuilderHud` — self-expiring above-hotbar text (toggle confirmations FR-02, restock
   misses FR-15); duration = `restock_message_duration_ms`.
 - `command/TextureBuilderCommands` — `/texturebuilder config|reload|status` via
-  `fabric-command-api-v2`; `config` defers `gui.setScreen` through `Minecraft.execute`.
+  `fabric-command-api-v2`; `config` defers `setScreen` through `Minecraft.execute`.
 - `compat/modmenu/ModMenuIntegration` — `modmenu` entrypoint (FR-22); Mod Menu is `compileOnly`
   (`20.0.0-beta.4`, Terraformers maven), never loaded when absent.
 
