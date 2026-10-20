@@ -11,6 +11,36 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.19 backport (branch `1.19`, verified 2026-10-19)
+This branch targets **Minecraft 1.19 – 1.19.2 / Fabric API 0.58.0+1.19 / Java 17**; the 26.x notes
+below describe `main` and stay as history. Behaviour is unchanged. Starts from the `1.20` port
+(`minecraft.setScreen`, `HudRenderCallback`, `KeyBindingHelper` + `"key.categories.gameplay"`,
+`ClientCommandManager`, `Inventory.selected`, `CycleButton.builder(fn).withInitialValue`,
+`handlePickItem(slot)`, recipe-book lambda `method_19891` with `remap = false`), plus what 1.19 lacks:
+- **No `GuiGraphics`:** HUD draws with `font.drawShadow(PoseStack, ..)`, size from
+  `getWindow().getGuiScaledWidth/Height()`; `HudRenderCallback` passes a `PoseStack`.
+- **No `StringWidget`/`GridLayout`/`HeaderAndFooterLayout`:** the config screen places the same layout
+  by hand with the metrics read from the 1.20 bytecode (36px header/footer, grid 30px below the
+  header, 2px spacing, labels centred); a private `Label` widget stands in for `StringWidget`.
+  `repositionElements()` doesn't exist; 1.19 re-runs `init()` on resize.
+- **No `Button.builder`/`Tooltip`:** `new Button(x, y, w, h, msg, onPress, onTooltip)` with the
+  tooltip drawn via `renderTooltip(font.split(text, 170))` (170 = `Tooltip.MAX_WIDTH`); the slider
+  tooltip is drawn from the screen's `render()` after all widgets. Positions via the public
+  `x`/`y` fields (no `setPosition`).
+- **No `isInventoryOpen()`:** `getSelectedTab() == CreativeModeTab.TAB_INVENTORY.getId()`.
+- **Fabric API mod id:** 0.58.x is id `fabric` (later builds are `fabric-api` and provide
+  `fabric`), so the jar depends on `"fabric": ">=0.58.0"`. The Maven `fabric-api` 0.58.x jar is an
+  empty stub; the real release jar comes from Modrinth.
+- **Toolchain:** Loom 1.17.21 `net.fabricmc.fabric-loom-remap`, `loom.officialMojangMappings()`,
+  Mod Menu 4.0.6 (compile-only), JDK 17, loader floor `>=0.14.6` (Fabric API 0.58.0's).
+- **Range `>=1.19 <1.19.3-`:** 1.19.3 removed the tooltip `Button` constructor, made
+  `AbstractWidget.x/y` private and replaced `getSelectedTab()`/`TAB_INVENTORY` (creative tab rework).
+- **Verified:** production launches (scratch launcher dir, JDK 17) to the title screen on 1.19
+  (fabric-api-0.58.0+1.19), 1.19.1 (0.58.5+1.19.1), 1.19.2 (0.77.0+1.19.2) with a probe force-loading
+  `class_490`/`class_481`/`class_636` (all mixins applied) and reflecting every changed member; on
+  1.19.3 (0.76.1+1.19.3) the member probes fail, and the final jar is refused by Loader's
+  "Incompatible mods found!" screen.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API

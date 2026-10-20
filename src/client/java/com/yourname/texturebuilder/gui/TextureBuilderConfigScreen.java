@@ -8,16 +8,14 @@ import com.yourname.texturebuilder.config.ModConfig;
 import com.yourname.texturebuilder.util.TextureBuilderHelper;
 import com.yourname.texturebuilder.util.TextureBuilderHelper.SlotEntry;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.StringWidget;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.layouts.GridLayout;
-import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
-import net.minecraft.client.gui.layouts.LinearLayout;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -32,9 +30,13 @@ import net.minecraft.world.item.ItemStack;
  * closed regardless, since selection normalizes proportionally at runtime, FR-09).
  *
  * <p>Built from vanilla widgets only — no Cloth Config / YACL — mirroring the author's other 26.2
- * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick:
- * the 26.2 {@code GuiGraphicsExtractor} render model exposes no simple item-icon draw call, so the
- * name is the verified widget-safe way to show live slot contents.
+ * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick
+ * (kept from the 26.x release, whose render model exposed no simple item-icon draw call).
+ *
+ * <p>1.19 predates the {@code StringWidget}/{@code GridLayout}/{@code HeaderAndFooterLayout} widgets
+ * the newer releases build this screen from, so the same layout is placed by hand here with the same
+ * metrics (36px header and footer, grid 30px below the header, 2px cell spacing, centred labels),
+ * and {@link Label} stands in for {@code StringWidget}.
  *
  * <p>Edits apply to the live config immediately (FR-10); the TOML is written when the screen
  * closes, by any route (Done, ESC, or the back control). A parent screen (the inventory) is
@@ -51,17 +53,21 @@ public class TextureBuilderConfigScreen extends Screen {
     private static final int COL_INCLUDE = 34;
     private static final int COL_WEIGHT = 100;
     private static final int COL_EFFECTIVE = 34;
+    private static final int[] COLUMNS = {COL_SLOT, COL_ITEM, COL_INCLUDE, COL_WEIGHT, COL_EFFECTIVE};
+    private static final int GRID_SPACING = 2;
+    /** Same metrics as the newer releases' {@code HeaderAndFooterLayout}. */
+    private static final int HEADER_HEIGHT = 36;
+    private static final int FOOTER_HEIGHT = 36;
+    private static final int CONTENT_PADDING_TOP = 30;
+    /** Width {@code Tooltip.create} wraps at in the newer releases. */
+    private static final int TOOLTIP_WIDTH = 170;
 
     private final Screen parent;
 
-    /**
-     * Rebuilt from scratch on every {@link #init()} — {@code init()} runs again on resize, and
-     * re-adding to a retained layout would stack a second copy of every widget.
-     */
-    private HeaderAndFooterLayout layout;
-    private final StringWidget[] itemNames = new StringWidget[TextureBuilder.HOTBAR_SIZE];
-    private final StringWidget[] effectivePercents = new StringWidget[TextureBuilder.HOTBAR_SIZE];
-    private StringWidget totalWidget;
+    /** Rebuilt from scratch on every {@link #init()} — {@code init()} runs again on resize. */
+    private final Label[] itemNames = new Label[TextureBuilder.HOTBAR_SIZE];
+    private final Label[] effectivePercents = new Label[TextureBuilder.HOTBAR_SIZE];
+    private Label totalWidget;
 
     public TextureBuilderConfigScreen(Screen parent) {
         super(Component.translatable("text.texturebuilder.config.title"));
@@ -71,55 +77,71 @@ public class TextureBuilderConfigScreen extends Screen {
     @Override
     protected void init() {
         ModConfig config = ModConfig.get();
-        this.layout = new HeaderAndFooterLayout(this);
-        this.layout.addTitleHeader(this.title, this.font);
 
-        GridLayout grid = new GridLayout().spacing(2);
-        GridLayout.RowHelper rows = grid.createRowHelper(5);
+        // Header: the title, centred in the header band.
+        int titleWidth = this.font.width(this.title);
+        this.addRenderableWidget(new Label((this.width - titleWidth) / 2, (HEADER_HEIGHT - 9) / 2,
+                titleWidth, 9, this.title, this.font));
 
-        rows.addChild(header("slot", COL_SLOT));
-        rows.addChild(header("item", COL_ITEM));
-        rows.addChild(header("included", COL_INCLUDE));
-        rows.addChild(header("weight", COL_WEIGHT));
-        rows.addChild(header("effective", COL_EFFECTIVE));
+        // Contents: a 5-column grid, centred horizontally, CONTENT_PADDING_TOP below the header.
+        int gridWidth = -GRID_SPACING;
+        for (int column : COLUMNS) {
+            gridWidth += column + GRID_SPACING;
+        }
+        int gridX = (this.width - gridWidth) / 2;
+        int[] columnX = new int[COLUMNS.length];
+        for (int c = 0, x = gridX; c < COLUMNS.length; x += COLUMNS[c] + GRID_SPACING, c++) {
+            columnX[c] = x;
+        }
+
+        int y = HEADER_HEIGHT + CONTENT_PADDING_TOP;
+        String[] headers = {"slot", "item", "included", "weight", "effective"};
+        for (int c = 0; c < COLUMNS.length; c++) {
+            this.addRenderableWidget(header(headers[c], columnX[c], y, COLUMNS[c]));
+        }
 
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
             final int slot = i;
+            y += ROW_HEIGHT + GRID_SPACING;
 
-            rows.addChild(new StringWidget(COL_SLOT, ROW_HEIGHT,
+            this.addRenderableWidget(new Label(columnX[0], y, COL_SLOT, ROW_HEIGHT,
                     Component.translatable("text.texturebuilder.config.slot", slot + 1), this.font));
 
-            itemNames[i] = new StringWidget(COL_ITEM, ROW_HEIGHT, Component.empty(), this.font);
-            rows.addChild(itemNames[i]);
+            itemNames[i] = this.addRenderableWidget(
+                    new Label(columnX[1], y, COL_ITEM, ROW_HEIGHT, Component.empty(), this.font));
 
-            rows.addChild(includedToggle(config, slot));
+            this.addRenderableWidget(includedToggle(config, slot, columnX[2], y));
 
-            rows.addChild(new WeightSlider(slot, config.weights[slot]));
+            this.addRenderableWidget(new WeightSlider(slot, config.weights[slot], columnX[3], y));
 
-            effectivePercents[i] = new StringWidget(COL_EFFECTIVE, ROW_HEIGHT, Component.empty(), this.font);
-            rows.addChild(effectivePercents[i]);
+            effectivePercents[i] = this.addRenderableWidget(
+                    new Label(columnX[4], y, COL_EFFECTIVE, ROW_HEIGHT, Component.empty(), this.font));
         }
 
-        totalWidget = new StringWidget(
-                COL_SLOT + COL_ITEM + COL_INCLUDE + COL_WEIGHT + COL_EFFECTIVE + 8, ROW_HEIGHT,
-                Component.empty(), this.font);
-        rows.addChild(totalWidget, 5);
+        y += ROW_HEIGHT + GRID_SPACING;
+        totalWidget = this.addRenderableWidget(
+                new Label(gridX, y, gridWidth, ROW_HEIGHT, Component.empty(), this.font));
 
-        this.layout.addToContents(grid);
+        // Footer: the Done button, centred in the footer band.
+        this.addRenderableWidget(new Button((this.width - 120) / 2,
+                this.height - FOOTER_HEIGHT + (FOOTER_HEIGHT - 20) / 2, 120, 20,
+                CommonComponents.GUI_DONE, b -> onClose()));
 
-        LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
-        footer.addChild(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(120).build());
-
-        this.layout.visitWidgets(this::addRenderableWidget);
-        this.repositionElements();
         refreshDerived();
         refreshItemNames();
     }
 
+    /** Draws the hovered slider's tooltip on top of every widget, as the newer releases' tooltips are. */
     @Override
-    protected void repositionElements() {
-        if (this.layout != null) {
-            this.layout.arrangeElements();
+    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+        super.render(poseStack, mouseX, mouseY, partialTick);
+        for (var child : this.children()) {
+            if (child instanceof WeightSlider slider && slider.isHoveredOrFocused()) {
+                this.renderTooltip(poseStack, this.font.split(
+                        Component.translatable("text.texturebuilder.config.weight.tooltip"), TOOLTIP_WIDTH),
+                        mouseX, mouseY);
+                break;
+            }
         }
     }
 
@@ -133,7 +155,7 @@ public class TextureBuilderConfigScreen extends Screen {
     @Override
     public void onClose() {
         ModConfig.get().save();
-        this.minecraft.gui.setScreen(this.parent);
+        this.minecraft.setScreen(this.parent);
     }
 
     private void refreshItemNames() {
@@ -208,10 +230,9 @@ public class TextureBuilderConfigScreen extends Screen {
     private class WeightSlider extends AbstractSliderButton {
         private final int slot;
 
-        WeightSlider(int slot, int weight) {
-            super(0, 0, COL_WEIGHT, ROW_HEIGHT, Component.empty(), toSliderValue(weight));
+        WeightSlider(int slot, int weight, int x, int y) {
+            super(x, y, COL_WEIGHT, ROW_HEIGHT, Component.empty(), toSliderValue(weight));
             this.slot = slot;
-            this.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.config.weight.tooltip")));
             this.updateMessage();
         }
 
@@ -244,14 +265,14 @@ public class TextureBuilderConfigScreen extends Screen {
      * installed malilib jar's lang file), matching the toggle hotkey's confirmation message and
      * Litematica's own toggle messages, since Litematica is built on malilib.
      */
-    private AbstractWidget includedToggle(ModConfig config, int slot) {
+    private AbstractWidget includedToggle(ModConfig config, int slot, int x, int y) {
         return CycleButton.<Boolean>builder(
                         value -> Component.translatable(value ? "text.texturebuilder.on" : "text.texturebuilder.off")
-                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED),
-                        config.included[slot])
+                                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED))
                 .withValues(true, false)
+                .withInitialValue(config.included[slot])
                 .displayOnlyValue()
-                .create(0, 0, COL_INCLUDE, ROW_HEIGHT,
+                .create(x, y, COL_INCLUDE, ROW_HEIGHT,
                         Component.translatable("text.texturebuilder.config.included"),
                         (button, value) -> {
                             config.included[slot] = value; // FR-10: applies immediately.
@@ -259,10 +280,36 @@ public class TextureBuilderConfigScreen extends Screen {
                         });
     }
 
-    private StringWidget header(String key, int width) {
-        return new StringWidget(width, ROW_HEIGHT,
+    private Label header(String key, int x, int y, int width) {
+        return new Label(x, y, width, ROW_HEIGHT,
                 Component.translatable("text.texturebuilder.config.header." + key)
                         .withStyle(ChatFormatting.UNDERLINE),
                 this.font);
+    }
+
+    /**
+     * Stand-in for the newer releases' {@code StringWidget}: inactive (never focused or clicked),
+     * text centred horizontally and vertically in its box, white with a shadow, no narration.
+     */
+    private static class Label extends AbstractWidget {
+        private final Font font;
+
+        Label(int x, int y, int width, int height, Component message, Font font) {
+            super(x, y, width, height, message);
+            this.font = font;
+            this.active = false;
+        }
+
+        @Override
+        public void renderButton(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+            Component message = this.getMessage();
+            int textX = this.x + Math.round(0.5F * (this.getWidth() - this.font.width(message)));
+            int textY = this.y + (this.getHeight() - 9) / 2;
+            this.font.drawShadow(poseStack, message, textX, textY, 0xFFFFFF);
+        }
+
+        @Override
+        public void updateNarration(NarrationElementOutput output) {
+        }
     }
 }

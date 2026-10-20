@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.yourname.texturebuilder.gui.TextureBuilderConfigScreen;
 
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
@@ -29,9 +28,11 @@ import net.minecraft.world.inventory.InventoryMenu;
  *       reason beyond "vanilla widgets are laid out by then": {@code init()} branches, sending
  *       creative-mode players to {@code CreativeModeInventoryScreen} and returning early, so the
  *       final return TAIL binds to is the survival path, immediately after
- *       {@code AbstractRecipeBookScreen.init()} has run.</li>
- *   <li>{@code onRecipeBookButtonClick()} at TAIL — repositions on recipe book toggle (see the
- *       layout note below).</li>
+ *       its recipe-book positioning has run.</li>
+ *   <li>The recipe book button's press lambda at TAIL — repositions on recipe book toggle (see
+ *       the layout note below). 1.19 has no {@code onRecipeBookButtonClick()}; the toggle logic
+ *       lives in that lambda, which Mojang's mappings leave unnamed, so it keeps its intermediary
+ *       name {@code method_19891} in both dev and production (hence {@code remap = false}).</li>
  *   <li>{@code containerTick()} at TAIL — a cheap per-tick safety net that re-asserts the position
  *       in case some future path moves the panel without going through either hook above.</li>
  * </ul>
@@ -45,7 +46,7 @@ import net.minecraft.world.inventory.InventoryMenu;
  * Declaring the superclass instead makes them genuinely inherited members that javac resolves and
  * the JVM looks up normally, so no {@code @Shadow} is needed at all. {@code AbstractContainerScreen}
  * is a valid choice because it is in {@code InventoryScreen}'s hierarchy
- * ({@code InventoryScreen} → {@code AbstractRecipeBookScreen} → {@code AbstractContainerScreen}).
+ * ({@code InventoryScreen} → {@code EffectRenderingInventoryScreen} → {@code AbstractContainerScreen}).
  * This mixin never calls {@code super.*}, so the non-direct superclass is safe.
  *
  * <p><b>Why the position must be re-asserted, not just set once:</b> opening the recipe book
@@ -53,13 +54,13 @@ import net.minecraft.world.inventory.InventoryMenu;
  * <em>both of which run after our creation hook would have fired if it were anchored higher up the
  * hierarchy</em>:
  * <ol>
- *   <li>{@code AbstractRecipeBookScreen.init()} calls {@code super.init()} <em>first</em> and only
+ *   <li>{@code InventoryScreen.init()} calls {@code super.init()} <em>first</em> and only
  *       then assigns {@code leftPos = recipeBookComponent.updateScreenPosition(...)}. Injecting at
  *       the TAIL of {@code AbstractContainerScreen.init()} therefore reads a stale, still-centred
  *       {@code leftPos} — the bug that left the button floating over the player model whenever the
  *       recipe book was open.</li>
- *   <li>The recipe book toggle button's own handler re-assigns {@code leftPos} and then calls
- *       {@code onRecipeBookButtonClick()} — it does <em>not</em> re-run {@code init()}, so a
+ *   <li>The recipe book toggle button's own handler re-assigns {@code leftPos} and then
+ *       sets {@code buttonClicked} — it does <em>not</em> re-run {@code init()}, so a
  *       create-time-only placement would go stale again on every toggle.</li>
  * </ol>
  *
@@ -72,6 +73,8 @@ public abstract class InventoryScreenMixin extends AbstractContainerScreen<Inven
 	/** Button size, and its inset from the inventory panel's right and top edges. */
 	private static final int TEXTUREBUILDER_WIDTH = 24;
 	private static final int TEXTUREBUILDER_HEIGHT = 12;
+	/** Width the newer releases' {@code Tooltip.create} wraps the tooltip at. */
+	private static final int TEXTUREBUILDER_TOOLTIP_WIDTH = 170;
 	private static final int TEXTUREBUILDER_MARGIN = 6;
 	private static final int TEXTUREBUILDER_TOP_OFFSET = 64;
 
@@ -86,16 +89,17 @@ public abstract class InventoryScreenMixin extends AbstractContainerScreen<Inven
 	@Inject(method = "init", at = @At("TAIL"))
 	private void texturebuilder$addConfigButton(CallbackInfo ci) {
 		InventoryScreen self = (InventoryScreen) (Object) this;
-		texturebuilder$button = this.addRenderableWidget(Button.builder(
-						Component.translatable("text.texturebuilder.button"),
-						pressed -> this.minecraft.gui.setScreen(new TextureBuilderConfigScreen(self)))
-				.bounds(0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT)
-				.tooltip(Tooltip.create(Component.translatable("text.texturebuilder.button.tooltip")))
-				.build());
+		texturebuilder$button = this.addRenderableWidget(new Button(
+				0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT,
+				Component.translatable("text.texturebuilder.button"),
+				pressed -> this.minecraft.setScreen(new TextureBuilderConfigScreen(self)),
+				(button, poseStack, mouseX, mouseY) -> this.renderTooltip(poseStack, this.font.split(
+						Component.translatable("text.texturebuilder.button.tooltip"), TEXTUREBUILDER_TOOLTIP_WIDTH),
+						mouseX, mouseY)));
 		texturebuilder$reposition();
 	}
 
-	@Inject(method = "onRecipeBookButtonClick", at = @At("TAIL"))
+	@Inject(method = "method_19891", at = @At("TAIL"), remap = false)
 	private void texturebuilder$onRecipeBookToggled(CallbackInfo ci) {
 		texturebuilder$reposition();
 	}
@@ -116,9 +120,8 @@ public abstract class InventoryScreenMixin extends AbstractContainerScreen<Inven
 	@Unique
 	private void texturebuilder$reposition() {
 		if (texturebuilder$button != null) {
-			texturebuilder$button.setPosition(
-					this.leftPos + this.imageWidth - TEXTUREBUILDER_WIDTH - TEXTUREBUILDER_MARGIN,
-					this.topPos + TEXTUREBUILDER_TOP_OFFSET);
+			texturebuilder$button.x = this.leftPos + this.imageWidth - TEXTUREBUILDER_WIDTH - TEXTUREBUILDER_MARGIN;
+			texturebuilder$button.y = this.topPos + TEXTUREBUILDER_TOP_OFFSET;
 		}
 	}
 }

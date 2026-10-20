@@ -9,11 +9,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.yourname.texturebuilder.gui.TextureBuilderConfigScreen;
 
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.CreativeModeTab;
 
 /**
  * Adds the TextureBuilder button to the creative inventory's "Survival Inventory" tab — the
@@ -42,8 +42,9 @@ import net.minecraft.world.entity.player.Inventory;
  * <p><b>Why this mixin declares {@link AbstractContainerScreen} as its superclass:</b> same reason
  * as {@link InventoryScreenMixin} — {@code leftPos}/{@code topPos}/{@code imageWidth} are declared
  * there, and {@code @Shadow} cannot resolve inherited fields. This mixin never calls
- * {@code super.*}. {@code isInventoryOpen()} is public on the target, so it is reached through a
- * cast rather than a shadow.
+ * {@code super.*}. {@code getSelectedTab()} (1.19's way to ask whether the inventory tab is open;
+ * {@code isInventoryOpen()} came later) is public on the target, so it is reached through a cast
+ * rather than a shadow.
  */
 @Mixin(CreativeModeInventoryScreen.class)
 public abstract class CreativeModeInventoryScreenMixin
@@ -52,6 +53,8 @@ public abstract class CreativeModeInventoryScreenMixin
 	/** Button size (same as the survival button), and its inset from the panel's right and top edges. */
 	private static final int TEXTUREBUILDER_WIDTH = 24;
 	private static final int TEXTUREBUILDER_HEIGHT = 12;
+	/** Width the newer releases' {@code Tooltip.create} wraps the tooltip at. */
+	private static final int TEXTUREBUILDER_TOOLTIP_WIDTH = 170;
 	private static final int TEXTUREBUILDER_RIGHT_INSET = 25;
 	private static final int TEXTUREBUILDER_TOP_OFFSET = 28;
 
@@ -67,12 +70,13 @@ public abstract class CreativeModeInventoryScreenMixin
 	@Inject(method = "init", at = @At("TAIL"))
 	private void texturebuilder$addConfigButton(CallbackInfo ci) {
 		CreativeModeInventoryScreen self = (CreativeModeInventoryScreen) (Object) this;
-		texturebuilder$button = this.addRenderableWidget(Button.builder(
-						Component.translatable("text.texturebuilder.button"),
-						pressed -> this.minecraft.gui.setScreen(new TextureBuilderConfigScreen(self)))
-				.bounds(0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT)
-				.tooltip(Tooltip.create(Component.translatable("text.texturebuilder.button.tooltip")))
-				.build());
+		texturebuilder$button = this.addRenderableWidget(new Button(
+				0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT,
+				Component.translatable("text.texturebuilder.button"),
+				pressed -> this.minecraft.setScreen(new TextureBuilderConfigScreen(self)),
+				(button, poseStack, mouseX, mouseY) -> this.renderTooltip(poseStack, this.font.split(
+						Component.translatable("text.texturebuilder.button.tooltip"), TEXTUREBUILDER_TOOLTIP_WIDTH),
+						mouseX, mouseY)));
 		texturebuilder$refresh();
 	}
 
@@ -98,10 +102,10 @@ public abstract class CreativeModeInventoryScreenMixin
 	@Unique
 	private void texturebuilder$refresh() {
 		if (texturebuilder$button != null) {
-			texturebuilder$button.visible = ((CreativeModeInventoryScreen) (Object) this).isInventoryOpen();
-			texturebuilder$button.setPosition(
-					this.leftPos + this.imageWidth - TEXTUREBUILDER_WIDTH - TEXTUREBUILDER_RIGHT_INSET,
-					this.topPos + TEXTUREBUILDER_TOP_OFFSET);
+			texturebuilder$button.visible = ((CreativeModeInventoryScreen) (Object) this).getSelectedTab()
+					== CreativeModeTab.TAB_INVENTORY.getId();
+			texturebuilder$button.x = this.leftPos + this.imageWidth - TEXTUREBUILDER_WIDTH - TEXTUREBUILDER_RIGHT_INSET;
+			texturebuilder$button.y = this.topPos + TEXTUREBUILDER_TOP_OFFSET;
 		}
 	}
 }
