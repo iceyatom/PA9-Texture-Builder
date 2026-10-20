@@ -11,6 +11,24 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.20 backport (branch `1.20`, verified 2026-10-19)
+This branch targets **Minecraft 1.20 – 1.20.1 / Fabric API 0.83.0+1.20 / Java 17**; the 26.x notes
+below describe `main` and stay as history. Behaviour is unchanged. Code is identical to the
+`1.20.1` branch port (same API table: `minecraft.setScreen`, `GuiGraphics.drawString`,
+`HudRenderCallback`, `KeyBindingHelper` + `"key.categories.gameplay"`, `ClientCommandManager`,
+`Inventory.selected`, `addToHeader(new StringWidget(..))`, `CycleButton.builder(fn).withInitialValue`,
+`handlePickItem(slot)`, recipe-book lambda `method_19891` with `remap = false`).
+- **Toolchain:** Loom 1.17.21 `net.fabricmc.fabric-loom-remap`, `loom.officialMojangMappings()`,
+  `modImplementation`/`modCompileOnly`, Mod Menu 7.0.1, JDK 17. Loader floor `>=0.14.21` (what
+  Fabric API 0.83.0 requires). Output `remapJar` → `build/libs/texture-builder - 1.20 - 1.0.1.jar`.
+- **Range `>=1.20 <1.20.2-`:** 1.20.2 moved `ClientPacketListener.send(Packet)` (`class_634.method_2883`)
+  up to the new `ClientCommonPacketListenerImpl`, so the slot-switch packet call would throw
+  `NoSuchMethodError` there.
+- **Verified:** production launches (scratch launcher dir, JDK 17) to the title screen on 1.20 (Fabric
+  API 0.83.0+1.20) and 1.20.1 (0.92.12+1.20.1), with a probe force-loading `class_490`/`class_481`/
+  `class_636` (all mixins applied); on 1.20.2 (0.91.6+1.20.2) the final jar is refused by Loader's
+  "Incompatible mods found!" screen.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API
