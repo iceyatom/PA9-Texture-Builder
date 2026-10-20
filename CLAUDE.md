@@ -11,6 +11,26 @@ refer to that document. Structure and conventions deliberately mirror the author
 and ContainerSort projects (`../../Shulker Pick Block/shulker-pick-block`,
 `../../Chest Sort/containersort`).
 
+## 1.20.2 backport (branch `1.20.2`, verified 2026-10-19)
+This branch targets **Minecraft 1.20.2 – 1.20.6 / Fabric API 0.91.6+1.20.2 / Java 17**; the 26.x
+notes below describe `main` and stay as history. Behaviour is unchanged. Source is identical to the
+`1.20` branch (same 26.x → 1.20 API table: `minecraft.setScreen`, `GuiGraphics.drawString`,
+`HudRenderCallback`, `KeyBindingHelper` + `"key.categories.gameplay"`, `ClientCommandManager`,
+`Inventory.selected`, `addToHeader(new StringWidget(..))`, `CycleButton.builder(fn).withInitialValue`,
+`handlePickItem(slot)`, recipe-book lambda `method_19891` with `remap = false`); only the target
+changes. Recompiling against 1.20.2 rebinds `getConnection().send(..)` to
+`ClientCommonPacketListenerImpl`, which is why the `1.20` jar stops at 1.20.1.
+- **Toolchain:** Loom 1.17.21 `net.fabricmc.fabric-loom-remap`, `loom.officialMojangMappings()`,
+  `modImplementation`/`modCompileOnly`, Mod Menu 8.0.1, JDK 17 (the jar also runs on the Java 21
+  that 1.20.5/1.20.6 require). Output `build/libs/texture-builder - 1.20.2 - 1.0.1.jar`.
+- **Depends:** loader `>=0.14.22` (Fabric API 0.91.6's floor); `fabric-api >=0.91.1`, not 0.91.6,
+  because the newest 1.20.3 build is `0.91.1+1.20.3` (numbered below 1.20.2's); minecraft
+  `>=1.20.2 <=1.20.6`.
+- **Verified:** production launches (scratch launcher dir) to the title screen on 1.20.2
+  (0.91.6+1.20.2), 1.20.3 (0.91.1+1.20.3), 1.20.4 (0.97.3+1.20.4) with JDK 17 and 1.20.5
+  (0.97.8+1.20.5), 1.20.6 (0.100.8+1.20.6) with Java 21, a probe force-loading `class_490`/
+  `class_481`/`class_636` (all mixins applied); final jar re-launched on 1.20.2 and 1.20.6.
+
 ## Build Environment Findings (verified 2026-08-06)
 
 - **Toolchain (SRS §2 pins, all verified to exist and build):** Loader 0.19.3, Fabric API

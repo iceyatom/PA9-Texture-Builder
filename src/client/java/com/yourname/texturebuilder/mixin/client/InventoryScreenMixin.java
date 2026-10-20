@@ -30,8 +30,10 @@ import net.minecraft.world.inventory.InventoryMenu;
  *       creative-mode players to {@code CreativeModeInventoryScreen} and returning early, so the
  *       final return TAIL binds to is the survival path, immediately after
  *       {@code AbstractRecipeBookScreen.init()} has run.</li>
- *   <li>{@code onRecipeBookButtonClick()} at TAIL — repositions on recipe book toggle (see the
- *       layout note below).</li>
+ *   <li>The recipe book button's press lambda at TAIL — repositions on recipe book toggle (see
+ *       the layout note below). 1.20.2 has no {@code onRecipeBookButtonClick()}; the toggle logic
+ *       lives in that lambda, which Mojang's mappings leave unnamed, so it keeps its intermediary
+ *       name {@code method_19891} in both dev and production (hence {@code remap = false}).</li>
  *   <li>{@code containerTick()} at TAIL — a cheap per-tick safety net that re-asserts the position
  *       in case some future path moves the panel without going through either hook above.</li>
  * </ul>
@@ -59,7 +61,7 @@ import net.minecraft.world.inventory.InventoryMenu;
  *       {@code leftPos} — the bug that left the button floating over the player model whenever the
  *       recipe book was open.</li>
  *   <li>The recipe book toggle button's own handler re-assigns {@code leftPos} and then calls
- *       {@code onRecipeBookButtonClick()} — it does <em>not</em> re-run {@code init()}, so a
+ *       sets {@code buttonClicked} — it does <em>not</em> re-run {@code init()}, so a
  *       create-time-only placement would go stale again on every toggle.</li>
  * </ol>
  *
@@ -88,14 +90,14 @@ public abstract class InventoryScreenMixin extends AbstractContainerScreen<Inven
 		InventoryScreen self = (InventoryScreen) (Object) this;
 		texturebuilder$button = this.addRenderableWidget(Button.builder(
 						Component.translatable("text.texturebuilder.button"),
-						pressed -> this.minecraft.gui.setScreen(new TextureBuilderConfigScreen(self)))
+						pressed -> this.minecraft.setScreen(new TextureBuilderConfigScreen(self)))
 				.bounds(0, 0, TEXTUREBUILDER_WIDTH, TEXTUREBUILDER_HEIGHT)
 				.tooltip(Tooltip.create(Component.translatable("text.texturebuilder.button.tooltip")))
 				.build());
 		texturebuilder$reposition();
 	}
 
-	@Inject(method = "onRecipeBookButtonClick", at = @At("TAIL"))
+	@Inject(method = "method_19891", at = @At("TAIL"), remap = false)
 	private void texturebuilder$onRecipeBookToggled(CallbackInfo ci) {
 		texturebuilder$reposition();
 	}

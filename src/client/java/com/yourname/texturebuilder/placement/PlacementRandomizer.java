@@ -110,7 +110,7 @@ public final class PlacementRandomizer {
             }
             Minecraft client = Minecraft.getInstance();
             Inventory inventory = player.getInventory();
-            int originalSlot = inventory.getSelectedSlot();
+            int originalSlot = inventory.selected;
 
             // Only take over interactions that look like block placement: an empty hand or a held
             // block. Tools, food, buckets etc. keep fully vanilla behaviour even while toggled ON.
@@ -176,7 +176,7 @@ public final class PlacementRandomizer {
             // the watch owns the restore and performs it once the pick resolves. Runs even if the
             // restock attempt threw (NFR-04).
             if (ModConfig.get().restoreSlotAfterPlacement && restockWatches[p.pickSlot()] == null
-                    && inventory.getSelectedSlot() != p.originalSlot()) {
+                    && inventory.selected != p.originalSlot()) {
                 switchSlot(client, inventory, p.originalSlot());
             }
         }
@@ -293,11 +293,11 @@ public final class PlacementRandomizer {
             gameMode.handleCreativeModeItemAdd(refill, 36 + p.pickSlot());
             return;
         }
-        if (findMainInventoryMatch(inventory, item, p.pickSlot()) >= 0) {
-            BlockPos placedPos = findPlacedBlock(client, p.hit(), item);
-            if (placedPos != null) {
-                gameMode.handlePickItemFromBlock(placedPos, false);
-            }
+        // 1.20.2 vanilla survival pick block: the client finds the item and asks the server to
+        // move that inventory slot into the hotbar; the server targets the selected (depleted) slot.
+        int match = findMainInventoryMatch(inventory, item, p.pickSlot());
+        if (match >= 0 && findPlacedBlock(client, p.hit(), item) != null) {
+            gameMode.handlePickItem(match);
         }
     }
 
@@ -349,7 +349,7 @@ public final class PlacementRandomizer {
      */
     private static void finishDeferredRestore(Minecraft client, LocalPlayer player, RestockWatch watch) {
         Inventory inventory = player.getInventory();
-        if (watch.restoreSlot() != NO_RESTORE && inventory.getSelectedSlot() != watch.restoreSlot()) {
+        if (watch.restoreSlot() != NO_RESTORE && inventory.selected != watch.restoreSlot()) {
             switchSlot(client, inventory, watch.restoreSlot());
         }
     }
@@ -405,7 +405,7 @@ public final class PlacementRandomizer {
      * ShulkerPickBlock uses.
      */
     private static void switchSlot(Minecraft client, Inventory inventory, int slot) {
-        inventory.setSelectedSlot(slot);
+        inventory.selected = slot;
         if (client.getConnection() != null) {
             client.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
         }
