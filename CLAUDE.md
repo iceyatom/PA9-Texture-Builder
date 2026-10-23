@@ -194,13 +194,143 @@ malilib's own lang file, and green-for-on/red-for-off is the universal conventio
 - `compat/modmenu/ModMenuIntegration` — `modmenu` entrypoint (FR-22); Mod Menu is `compileOnly`
   (`20.0.0-beta.4`, Terraformers maven), never loaded when absent.
 
+### Gradient mode (added 2026-10-22, v1.1.0, branch `Gradient`)
+A second slot-selection mode: the slot is picked from **where** the block goes along a straight
+X, Y or Z line between two saved points, so a build fades from one block to the next. The original
+weighted-random mode is now called **Texture mode** (renamed at the user's request, same day) and
+behaves exactly as before. Only the "which slot" decision in `PlacementRandomizer.beforePlacement`
+differs; the held-item guard, restock (Pick Block / `RestockWatch`) and
+`restore_slot_after_placement` are shared.
+- `util/GradientHelper` — pure Java, no MC deps (like `TextureBuilderHelper`). `selectAxis` (largest
+  |d|, **any tie → `AXIS_NONE`**, including identical points), `positionT` (clamped, either
+  direction), `selectIndex(t, boundaries[], transition, random)`, `moveHandle` (keeps `MIN_GAP` =
+  0.02 to neighbours/ends), `evenBoundaries`, `isValid`, `blendHalfWidth`, `segmentShare`.
+  **Blend math:** boundary k's half-width = `transition × min(left seg, right seg) / 2`, so it is at
+  most half the smaller adjacent segment and zones never overlap; P(right entry) rises linearly
+  0 → 0.5 → 1 across `[b-hw, b+hw]`; outside zones the band's entry is certain. At 100% every
+  boundary fades from the middle of one band to the middle of the next.
+  **Verified standalone 2026-10-22** (54 checks, all pass): axis winner on each axis in both
+  directions, X/Y, X/Z, Y/Z and 3-way ties, identical points; t clamping both directions; hard bands
+  at transition 0 for every t; t=0 → entry 0 and t=1 → entry N-1 for N=2..9; N=2 zone edges;
+  50/50 at each boundary (100k draws: 0.4990/0.5011/0.5001); uneven segments probed at 5 points per
+  zone, 100k draws each, all within 0.01 of the linear ramp; no zone overlap at 100%; min-gap and
+  zero-width segments stay in range. The test lives outside the repo (scratchpad); recreate it with
+  plain `javac` against `GradientHelper.java` if needed.
+- `placement/GradientController` — keybind cycle, point state, slot pick, status line.
+  `State` = NO_POINTS / OTHER_DIMENSION / START_ONLY / NO_AXIS / VALID; anything but VALID makes
+  `selectSlot` return -1 and the weighted random pool decides (fallback = Texture-mode behaviour).
+  Fewer than 2 gradient-included slots also returns -1.
+  Placed position P is **predicted before placement** with the restock code's rule in pre-placement
+  form: clicked pos if `BlockState.canBeReplaced()` (no-arg), else `clicked.relative(face)`.
+  Dimension id = `level.dimension().identifier().toString()`.
+  **Keybind cycle** (`key.texturebuilder.gradient_point`, unbound, GAMEPLAY): the cycle position comes
+  from the stored points, so it survives restarts: no start → set start; start only → set end (HUD
+  "Gradient start and end are the same" instead of "end set" when the axis is tied); both → clear.
+  **Other dimension (user's choice, 2026-10-22):** if the stored points belong to another dimension,
+  a press *starts fresh here*: sets a new start and drops the old end. Until then the old points are
+  ignored, not deleted. Not looking at a block → HUD "Look at a block to set a gradient point" and
+  the cycle does not advance (small addition, not in the spec). Every change calls `ModConfig.save()`.
+- `ModConfig` — `mode = "texture"|"gradient"` (`Mode` enum `TEXTURE`/`GRADIENT`, default texture;
+  **`"random"` still loads as Texture**, the pre-rename value), `gradient_included` (slot indices
+  0-8, stored as `boolean[] gradientIncluded`, **separate from Texture mode's `included`**),
+  `gradient_boundaries` (N-1 fractions), `gradient_transition` (0-100), `gradient_start`/
+  `gradient_end` (`[x, y, z]` or `[]`), `gradient_dimension`. The gradient's blocks are
+  `gradientPalette()` = the gradient-included slots **in hotbar order**, left to right = start to
+  end (user's choice; no custom order, no repeated slots). `setGradientIncluded` redistributes the
+  handles evenly whenever the count changes. `sanitizeGradient()` on load: boundaries that don't fit
+  the included count → even (empty below 2), transition clamped, end dropped without a start.
+  Defaults: slots 1 and 2 included, even split, transition 50%. String values are written quoted
+  (`mode = "gradient"`); the existing `stripComment` already unquotes.
+- **One config screen for both modes (changed 2026-10-22 at the user's request).** An earlier draft
+  had a separate `GradientConfigScreen` reached by a "Gradient..." button, with -/+ block count and
+  per-entry Slot buttons; it was **removed**. `TextureBuilderConfigScreen` now builds its contents
+  from the current mode and the footer holds only **Mode** (120) + **Done** (120). The Mode button
+  sets `rebuildPending`, and `tick()` calls `rebuildWidgets()`, so the click handler never removes
+  its own button mid-event. No mode keybind (spec).
+  - **Both modes share a 28/28 header/footer** (fixed after the user saw the title sit higher in
+    Gradient mode, which then used 24 vs Texture's default 33).
+  - **Both tables are exactly 343px wide, with explicit column widths** (user request: same
+    horizontal footprint in both modes). 343 is what the Texture screen always *rendered*: it asked
+    for 302, but its full-width total line sat inside the grid and stretched Slot 30→58 and
+    Included 46→59 (see the GridLayout pitfall). Nothing spans the grid any more, so the constants
+    now are the real widths. 343 fits any GUI ≥343 wide (1080p at scale 4 is 480) but not the
+    320px minimum.
+  - Texture mode: Slot 58 / Item 84 / Included 53 (46px button) / Weight 100 / Eff. % 40, 16px rows.
+    Below the grid: the weight-total line (301) + **Reset** (40×16, under Eff. %), which sets every
+    weight back to `ModConfig.DEFAULT_WEIGHT` (10, the shipped default) and leaves Included alone;
+    it sets `rebuildPending` so all sliders redraw with the new value. Content 196px → 252 total.
+  - Gradient mode: Slot 58 / Item 186 / Included 53 / Eff. % 40 (3×2 spacing = 343), bound to
+    `gradientIncluded`. Same Slot→Item gap as Texture. Eff. % = each included slot's
+    `segmentShare` (blend zones are symmetric, so that is also the expected share of blocks); "—"
+    for excluded slots and for all while fewer than 2 are included; blank if
+    `auto_normalize_display` is off. Below the grid: distribution bar (246) + **Reset** (95, spreads
+    the handles evenly), Transition slider (246) + Clear points (95), points/axis line (10px). The
+    buttons sit exactly under Included + Eff. %, so the bar and Transition end where Item ends.
+    14px rows; content 214px → **270px total**, exactly the height a 1080p window gets at scale 4.
+  - ⚠️ **GridLayout pitfall:** a child added with `RowHelper.addChild(w, span)` makes the grid split
+    `w`'s width evenly over the spanned columns and **widen** any narrower column to match. A
+    302px bar spanning 3 columns blew Slot and Included out to ~100px (the user's first
+    screenshot), and Texture's 5-column total line had silently widened its table to 343px since
+    v1.0. Full-width rows now live in a vertical `LinearLayout` *below* the grid in both modes.
+  - Clear points saves at once; `onClose()` saves on every route.
+  - **Measured in a 26.3 dev client at 1920×1080 (GUI 480×270, scale 4), 2026-10-22:** both tables
+    span x=68–411. Texture: Slot 68, Item 128, Included 214, Weight 269, Eff. % 371, total line
+    y=226 with Reset at x=371. Gradient: Slot 68, Item 128, Included 316, Eff. % 371; bar/Transition
+    x=68 w=246, Reset/Clear x=316 w=95; points line y=232. Footer y=246 and title y=10 in both.
+  - **How to measure/screenshot a screen without playing:** a temporary class ticked from
+    `END_CLIENT_TICK` that, while `client.level == null`, calls `getWindow().setWindowed(1920,1080)`,
+    opens the screen via `client.gui.setScreen(...)`, then `Screenshot.grab(client.gameDirectory,
+    "name.png", client.gameRenderer.mainRenderTarget(), 1, msg -> {})` and logs every
+    `client.gui.screen().children()` widget's x/y/w/h, then `client.stop()`. Run `gradlew runClient`;
+    PNGs land in `run/screenshots/`. (26.x: the current screen is `Gui.screen()`, not
+    `Minecraft.screen`.) Delete the class before the release build.
+- `gui/GradientDistributionSlider extends AbstractWidget` — the custom N-1-handle slider. Draws with
+  vanilla's `widget/slider[_highlighted]` and `widget/slider_handle[_highlighted]` sprites via
+  `blitSprite(RenderPipelines.GUI_TEXTURED, …)` (same as `AbstractSliderButton`'s bytecode),
+  alternating segment tints, a gold bar per blend zone, segment labels = live block names cut with
+  `Font.plainSubstrByWidth`. Click grabs the nearest handle (tie → the side the cursor is on) and
+  moves it; drag moves it; click sound on release. Keyboard: Enter/Space = next handle, Left/Right =
+  ±1% (Shift ±5%). All moves go through `GradientHelper.moveHandle`. With fewer than 2 slots
+  included it draws "Include at least 2 slots for a gradient" and ignores input.
+- Toggle message: `message.texturebuilder.toggle` still `"Texture Builder: %s"`; the `%s` is now
+  `text.texturebuilder.toggle_state` = `"%s (%s)"` (ON/OFF + `text.texturebuilder.mode.*`), styled
+  green/red as one Component → "Texture Builder: ON (Gradient)". `/texturebuilder status` adds a
+  `session = ON (Gradient)` line, mode, gradient slots with shares, transition, and the points/axis
+  line from `GradientController.describePoints`.
+- **26.3 API used by this feature, verified by `javap` 2026-10-22** against
+  `minecraft-{clientonly,common}-deobf/26.3`: `AbstractWidget` abstract
+  `extractWidgetRenderState(GuiGraphicsExtractor,int,int,float)` / `updateWidgetNarration(
+  NarrationElementOutput)`, `onClick(MouseButtonEvent,boolean)`, `onDrag(MouseButtonEvent,double,
+  double)`, `onRelease(MouseButtonEvent)`, `playDownSound(SoundManager)`, static
+  `playButtonClickSound`, `protected float alpha`; `GuiEventListener.keyPressed(KeyEvent)`;
+  `InputWithModifiers.isLeft/isRight/isSelection/hasShiftDown`; `MouseButtonEvent.x()`;
+  `GuiGraphicsExtractor.fill/blitSprite/text/requestCursor`; `CursorTypes.RESIZE_EW`;
+  `ARGB.white(float)`; `ResourceKey.identifier()`; `BlockStateBase.canBeReplaced()`;
+  `HitResult.Type.BLOCK`; `Screen.rebuildWidgets()`; `HeaderAndFooterLayout(Screen,int,int)`;
+  `StringWidget.setMaxWidth(int, TextOverflow.SCROLLING)`; `CycleButton.Builder.withValues(T...)`.
+  Side finding: `GuiGraphicsExtractor.item(ItemStack,int,int)` **does exist in 26.3**, so decision 4
+  (names instead of icons) could be revisited.
+- No mixin was added or changed for this feature.
+
 ## How to build
 ```bash
 cd texturebuilder
 java -version       # must report 25
 gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step needed
-# => build/libs/texture-builder - 26.2 - 1.0.0.jar
+# => build/libs/texture-builder - 26.3 - 1.1.0.jar   (Gradient branch)
 ```
+
+### Production launch test (26.3, 2026-10-22)
+`prodlaunch.py` (from the `fabric-mod-version-port` skill) with profile
+`fabric-loader-0.19.5-26.3`, the built jar + `fabric-api-0.160.6+26.3.jar` (from the Gradle cache)
+in a scratch game dir, with `--java` set to the launcher's own runtime
+`%LOCALAPPDATA%\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\java-runtime-epsilon\windows-x64\java-runtime-epsilon\bin\java.exe`
+(Microsoft OpenJDK 25.0.1, what 26.3's version JSON asks for).
+⚠️ **On this machine the game often dies natively during the first resource reload** (exit 139, no
+hs_err, no crash report), right after the unifont `.hex` lines. It is **intermittent and not the
+mod**: 3 launches each gave 1/3 title screens for 1.1.0 and 2/3 for the old 1.0.1 jar, all with the
+launcher runtime. Temurin 25.0.3 failed 3/3 earlier, so prefer the launcher runtime, and **retry
+until "Sound engine started" appears** before reading anything into a failure.
 
 ## Design decisions / deviations from the SRS (all deliberate)
 1. **Mojmap, not Yarn** — Yarn doesn't exist for 26.x (see findings).
@@ -288,6 +418,21 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
   - config-screen layout fit at GUI scale 4+ on small windows (10 rows of 16px + header/footer).
 - ⚠️ `KeyMapping.isUnbound()` compiled clean; first-tick TOML keybind application assumes options
   are loaded by then (they are — options load during `Minecraft.<init>`, ticks start after).
+- **Gradient mode (v1.1.0):**
+  - ✅ Clean `gradlew.bat build`; `GradientHelper` unit-verified standalone (see above).
+  - ✅ Production launch of `texture-builder - 26.3 - 1.1.0.jar` (single-screen version) reached
+    the title screen ("Sound engine started"), no mod warnings (see the intermittent native crash
+    note under "Production launch test"). A pre-seeded TOML with the legacy `mode = "random"`,
+    `gradient_included = [0, 3, 4]`, two boundaries, transition, points and dimension was rewritten
+    as `mode = "texture"` with every gradient value unchanged. `options.txt` shows both keybinds
+    registered, unbound. The jar contains no leftover `GradientConfigScreen` class.
+  - ⚠️ Not yet checked in a world: placement along each axis, the keybind cycle and its HUD
+    messages, other-dimension behaviour, the config screen in both modes (look, live mode swap,
+    fit at GUI scale 4), the distribution slider's drag/keyboard feel, and restock of a depleted
+    gradient slot. The GUI and placement classes only load when first used, so the launch does not
+    exercise them.
+  - ⚠️ P is predicted *before* placement with no-arg `canBeReplaced()`; item-dependent replacement
+    (e.g. slab-into-slab, which places in the clicked block) may give a position one block off.
 
 ## TODO / next steps
 1. Launch a 26.2 dev client (`gradlew runClient`) or install the jar; walk TC-01..TC-12.
@@ -295,3 +440,4 @@ gradlew.bat build   # wrapper (9.5.1) is committed; no `gradle wrapper` step nee
    Class-load verified in a 26.3 dev client; the button's on-screen look still wants an in-game glance.
 3. If the TB button crowds other inventory mods, make its corner configurable (SRS §12 risk).
 4. Consider a repeat-suppression window for the FR-15 message (SRS §12 "future version").
+5. Walk the gradient-mode in-world checks listed under "Verified vs needs in-game confirmation".

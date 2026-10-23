@@ -1,5 +1,6 @@
 {
   "key.texturebuilder.toggle": "Toggle Texture Builder",
+  "key.texturebuilder.gradient_point": "Set Gradient Point",
 
   "text.texturebuilder.button": "TB",
   "text.texturebuilder.button.tooltip": "Open Texture Builder Settings",
@@ -17,10 +18,40 @@
   "text.texturebuilder.config.empty": "(empty)",
   "text.texturebuilder.config.total": "Included weight total: %s",
   "text.texturebuilder.config.total.normalized": " (normalizes to 100% at runtime)",
+  "text.texturebuilder.config.reset_weights": "Reset",
+  "text.texturebuilder.config.reset_weights.tooltip": "Set every slot's weight back to the default (10). Included slots are not changed.",
+
+  "text.texturebuilder.config.mode": "Mode",
+  "text.texturebuilder.config.mode.tooltip": "Texture: weighted random pick from the included slots. Gradient: the block's position between the gradient start and end points picks the block. Each mode has its own Included slots.",
+
+  "text.texturebuilder.gradient.included.tooltip": "Include this slot in the gradient. Included slots run from the start point to the end point in hotbar order (left to right).",
+  "text.texturebuilder.gradient.need_two": "Include at least 2 slots for a gradient",
+  "text.texturebuilder.gradient.distribution": "Distribution",
+  "text.texturebuilder.gradient.distribution.tooltip": "Drag a handle to change how much of the start-to-end line each block owns. Handles can't pass each other. Keyboard: Enter/Space picks the next handle, Left/Right moves it (Shift for bigger steps).",
+  "text.texturebuilder.gradient.distribution.narration": "Distribution, handle %s of %s at %s percent",
+  "text.texturebuilder.gradient.transition": "Transition: %s%%",
+  "text.texturebuilder.gradient.transition.tooltip": "Blend width around each boundary. 0%: hard bands. 100%: each block fades fully into the next.",
+  "text.texturebuilder.gradient.reset": "Reset",
+  "text.texturebuilder.gradient.reset.tooltip": "Spread the included blocks evenly along the line again.",
+  "text.texturebuilder.gradient.clear_points": "Clear points",
+  "text.texturebuilder.gradient.points.none": "Points: not set (bind \"Set Gradient Point\" in Controls)",
+  "text.texturebuilder.gradient.points.other_dimension": "Points are in %s (ignored here)",
+  "text.texturebuilder.gradient.points.start_only": "Start %s, end not set",
+  "text.texturebuilder.gradient.points.same": "Start %s, end %s: start and end are the same",
+  "text.texturebuilder.gradient.points.valid": "Start %s, end %s, axis %s",
+
+  "text.texturebuilder.mode.texture": "Texture",
+  "text.texturebuilder.mode.gradient": "Gradient",
 
   "message.texturebuilder.toggle": "Texture Builder: %s",
+  "text.texturebuilder.toggle_state": "%s (%s)",
   "text.texturebuilder.on": "ON",
   "text.texturebuilder.off": "OFF",
+  "message.texturebuilder.gradient.start_set": "Gradient start set: %s %s %s",
+  "message.texturebuilder.gradient.end_set": "Gradient end set: %s %s %s",
+  "message.texturebuilder.gradient.cleared": "Gradient points cleared",
+  "message.texturebuilder.gradient.same": "Gradient start and end are the same",
+  "message.texturebuilder.gradient.no_target": "Look at a block to set a gradient point",
   "message.texturebuilder.no_more": "No more %s found",
   "message.texturebuilder.failed": "Texture Builder hit an error and is disabled for this session (see log)"
 }

@@ -24,22 +24,26 @@ source refer to that document.
 
 1. Install Fabric Loader 0.19.5+ for Minecraft 26.3 via the Fabric installer.
 2. Put **Fabric API 0.160.6+26.3** (or later for Minecraft 26.3) in `.minecraft/mods/`.
-3. Put **`texture-builder - 26.3 - 1.0.1.jar`** (from `build/libs/`) in `.minecraft/mods/`.
+3. Put **`texture-builder - 26.3 - 1.1.0.jar`** (from `build/libs/`) in `.minecraft/mods/`.
 4. (Optional) add Mod Menu.
 5. Launch the `fabric-loader-26.3` profile.
 
 ## Use
 
 - **Toggle** — bind "Toggle Texture Builder" in Options → Controls (unbound by default), or set
-  `toggle_keybind` in the config. Toggling shows a brief "Texture Builder: ON/OFF" message above
-  the hotbar, with ON in green and OFF in red (matching Litematica/malilib's toggle coloring). The
-  state is per-session; it only starts ON if `enabled = true` in the config.
-- **Configure the pool** — open your inventory and click the small **TB** button (just below the
-  crafting output slot), or run `/texturebuilder config`, or use Mod Menu's gear. Each hotbar slot
-  row shows the item currently in it (live), an Included toggle, and a **weight slider** (0–100).
+  `toggle_keybind` in the config. Toggling shows a brief message above the hotbar that also names
+  the active mode, e.g. "Texture Builder: ON (Gradient)" in green or "Texture Builder: OFF (Texture)"
+  in red (matching Litematica/malilib's toggle coloring). The state is per-session; it only starts
+  ON if `enabled = true` in the config.
+- **Configure the pool (Texture mode)** — open your inventory and click the small **TB** button
+  (just below the crafting output slot), or run `/texturebuilder config`, or use Mod Menu's gear.
+  The **Mode** button at the bottom switches between *Texture* (a weighted random mix, the
+  default) and *Gradient* (see below), and the screen changes to match. In Texture mode each hotbar
+  slot row shows the item currently in it (live), an Included toggle, and a **weight slider** (0–100).
   Drag a slider to adjust, or click it and use the arrow keys for an exact value. Weights don't
   have to sum to 100 — selection normalizes proportionally, and the "Eff. %" column shows each
-  slot's real resulting share; the total line turns red as a reminder.
+  slot's real resulting share; the total line turns red as a reminder. The **Reset** button next
+  to the total puts every weight back to 10 (Included toggles are left as they are).
 - **Build** — with the mod ON, place blocks normally. The hotbar selection follows each placement,
   so the highlighted slot always shows which block just went down. (Set
   `restore_slot_after_placement = true` in the config if you'd rather the selection stay put on the
@@ -53,7 +57,37 @@ source refer to that document.
   block that actually ran out rather than whatever you happen to be looking at next.
   *Requires Pick Block to be bound* (it is by default, to the middle mouse button); if you've
   unbound it, restocking falls back to vanilla sources only.
-- **Commands** — `/texturebuilder config | reload | status`. Config file:
+- **Gradient mode** — instead of a random mix, fade a build from one block into the next along a
+  straight line. It only applies while Texture Builder is ON.
+  1. **Pick the mode.** In the config screen (inventory **TB** button), click the **Mode** button
+     at the bottom until it says *Gradient*. The screen switches to the gradient settings right
+     away. There is no keybind for the mode.
+  2. **Set the two end points.** Bind **"Set Gradient Point"** in Options → Controls (unbound by
+     default). Look at a block and press it once to set the **start**, look at another block and
+     press again to set the **end**, and press a third time to **clear** both. A brief message
+     confirms each press ("Gradient start set: x y z", …). The fade runs along whichever of X, Y or
+     Z the two points are farthest apart on. If two axes tie (or both points are the same block),
+     you'll see "Gradient start and end are the same" and placement uses Texture mode's mix instead.
+     Points are saved with the dimension they were set in and are ignored in other dimensions;
+     setting a new start in another dimension replaces them.
+  3. **Choose the blocks.** In Gradient mode the screen shows the same Slot / Item / Included
+     columns. Turn **Included** on for the slots you want in the gradient. They run from the start
+     point to the end point in hotbar order, left to right, so arrange your hotbar in the order you
+     want the fade. You need at least 2. With fewer, placement uses Texture mode's mix. Gradient
+     mode remembers its own Included slots, so this doesn't change your Texture pool. The
+     **Eff. %** column shows how much of the line each included slot gets.
+  4. **Shape the fade.** Below the slot rows, the **distribution** bar shows each block's share of the line, labelled
+     with its name. Drag a handle to move a boundary (handles can't pass each other), or select
+     the bar and press Enter/Space to pick a handle and the arrow keys to nudge it (Shift for
+     bigger steps). **Reset** spreads the blocks evenly again. **Transition** sets how soft each boundary is: 0% gives hard bands, 100% makes
+     each block fade fully into the next. The gold marks on the bar show each blend zone.
+     **Clear points** removes the start and end points. The line underneath shows the current
+     points and axis.
+
+  Blocks placed before the start or past the end use the first or last block. Restocking and the
+  `restore_slot_after_placement` option work the same in both modes.
+- **Commands** — `/texturebuilder config | reload | status`. `status` also shows the session
+  state and mode, the gradient slots, transition, points and axis. Config file:
   `config/texturebuilder.toml`.
 
 Works in survival and creative, single-player and on vanilla servers — every slot switch,
@@ -65,7 +99,7 @@ placement, and restock uses the exact packets a manual player would generate; no
 cd texturebuilder
 java -version        # must report 25
 gradlew.bat build    # Windows (./gradlew build on macOS/Linux)
-# Output: build/libs/texture-builder - 26.3 - 1.0.1.jar
+# Output: build/libs/texture-builder - 26.3 - 1.1.0.jar
 ```
 
 See `CLAUDE.md` for build-environment findings (notably: **no Yarn mappings exist for 26.x** —

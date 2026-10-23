@@ -119,7 +119,17 @@ public final class PlacementRandomizer {
                 return;
             }
 
-            int pick = TextureBuilderHelper.selectSlot(poolEntries(), RANDOM);
+            // Gradient mode picks by the placed block's position. It returns -1 when the points
+            // are unset, from another dimension, or have no single axis, and the weighted random
+            // pool decides instead. Only this choice differs between modes; the guards above and
+            // the restock/restore handling below are shared.
+            int pick = -1;
+            if (ModConfig.get().mode == ModConfig.Mode.GRADIENT) {
+                pick = GradientController.selectSlot(client, hit, RANDOM);
+            }
+            if (pick < 0) {
+                pick = TextureBuilderHelper.selectSlot(poolEntries(), RANDOM);
+            }
             if (pick < 0) {
                 return; // nothing included / all weights zero — leave placement alone.
             }
