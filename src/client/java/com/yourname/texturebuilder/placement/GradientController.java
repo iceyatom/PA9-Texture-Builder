@@ -1,5 +1,8 @@
 package com.yourname.texturebuilder.placement;
 
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.random.RandomGenerator;
 
 import com.yourname.texturebuilder.TextureBuilder;
@@ -11,6 +14,9 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
@@ -124,9 +130,9 @@ public final class GradientController {
     }
 
     /**
-     * The hotbar slot gradient mode picks for this placement, or -1 to fall back to Texture
-     * mode's weighted random pool (points unset, from another dimension, with no single axis, or
-     * fewer than 2 slots included in the gradient).
+     * The hotbar slot gradient mode picks for this placement, or -1 if it can't pick. Callers check
+     * {@link #blockedReason} first, which blocks every case that returns -1 here, so the caller's
+     * Texture-pool fallback is only a safety net.
      */
     public static int selectSlot(Minecraft client, BlockHitResult hit, RandomGenerator random) {
         if (state(client) != State.VALID || hit == null) {
@@ -152,6 +158,54 @@ public final class GradientController {
                     placed.toShortString(), GradientHelper.axisName(axis), String.format("%.3f", t), index + 1, slot + 1);
         }
         return slot;
+    }
+
+    /**
+     * Why Gradient mode must not place right now, as a gold warning for the HUD, or {@code null}
+     * when it can. Every point problem, and fewer than 2 included slots, blocks placement rather
+     * than falling back to Texture mode's mix (user's choice, 2026-10-25). Point problems are
+     * reported first.
+     */
+    public static Component blockedReason(Minecraft client) {
+        ModConfig cfg = ModConfig.get();
+        MutableComponent reason = switch (state(client)) {
+            case NO_POINTS -> Component.translatable("message.texturebuilder.gradient.blocked.no_points");
+            case START_ONLY -> Component.translatable("message.texturebuilder.gradient.blocked.no_end");
+            case OTHER_DIMENSION -> Component.translatable("message.texturebuilder.gradient.blocked.other_dimension",
+                    cfg.gradientDimension);
+            case NO_AXIS -> Component.translatable("message.texturebuilder.gradient.same");
+            case VALID -> cfg.gradientPalette().length < GradientHelper.MIN_ENTRIES
+                    ? Component.translatable("message.texturebuilder.gradient.blocked.need_two")
+                    : null;
+        };
+        return reason == null ? null : reason.withStyle(ChatFormatting.GOLD);
+    }
+
+    /** Per block class: whether it overrides {@code useWithoutItem}, i.e. has its own right-click. */
+    private static final Map<Class<?>, Boolean> USE_ACTION_CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * Whether right-clicking this block does something of its own (open a chest, toggle a door,
+     * press a button), judged by whether its class overrides {@code BlockBehaviour.useWithoutItem}.
+     * Vanilla runs that before placing the held item (unless the player is sneaking with an item),
+     * so when it acts, nothing is placed and the click can safely go through while placement is
+     * blocked.
+     *
+     * <p>Name-based reflection is safe because 26.x runs with Mojmap names in both dev and
+     * production. A few blocks override it but sometimes pass (e.g. redstone ore lighting up); a
+     * click on those still places the held block, since the client can't know in advance.
+     */
+    public static boolean hasUseAction(Block block) {
+        return USE_ACTION_CACHE.computeIfAbsent(block.getClass(), cls -> {
+            for (Class<?> c = cls; c != null && c != BlockBehaviour.class; c = c.getSuperclass()) {
+                for (Method m : c.getDeclaredMethods()) {
+                    if (m.getName().equals("useWithoutItem") && m.getParameterCount() == 5) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
     }
 
     /**

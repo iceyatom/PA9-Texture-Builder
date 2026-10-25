@@ -463,7 +463,7 @@ public final class ModConfig {
 
                 # Hotbar slots (0-8) included in the gradient, separate from the texture pool.
                 # They run from the start point to the end point in hotbar order (left to right).
-                # At least 2 are needed; with fewer, placement uses the texture pool instead.
+                # At least 2 are needed; with fewer, Gradient mode blocks placement with a warning.
                 gradient_included = %s
 
                 # Boundaries between consecutive gradient blocks, as fractions (0-1) of the

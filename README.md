@@ -67,13 +67,16 @@ source refer to that document.
      press again to set the **end**, and press a third time to **clear** both. A brief message
      confirms each press ("Gradient start set: x y z", …). The fade runs along whichever of X, Y or
      Z the two points are farthest apart on. If two axes tie (or both points are the same block),
-     you'll see "Gradient start and end are the same" and placement uses Texture mode's mix instead.
+     you'll see "Gradient start and end are the same".
+     **Until both points are set (in this dimension, on a clear axis), Gradient mode won't place
+     blocks.** Trying to shows a warning such as "No gradient points selected". Right-clicking
+     chests, doors, buttons and other usable blocks still works.
      Points are saved with the dimension they were set in and are ignored in other dimensions;
      setting a new start in another dimension replaces them.
   3. **Choose the blocks.** In Gradient mode the screen shows the same Slot / Item / Included
      columns. Turn **Included** on for the slots you want in the gradient. They run from the start
      point to the end point in hotbar order, left to right, so arrange your hotbar in the order you
-     want the fade. You need at least 2. With fewer, placement uses Texture mode's mix. Gradient
+     want the fade. You need at least 2. With fewer, Gradient mode won't place and shows a warning. Gradient
      mode remembers its own Included slots, so this doesn't change your Texture pool. The
      **Eff. %** column shows how much of the line each included slot gets.
   4. **Shape the fade.** Below the slot rows, the **distribution** bar shows each block's share of the line, labelled

@@ -52,6 +52,10 @@
   "message.texturebuilder.gradient.cleared": "Gradient points cleared",
   "message.texturebuilder.gradient.same": "Gradient start and end are the same",
   "message.texturebuilder.gradient.no_target": "Look at a block to set a gradient point",
+  "message.texturebuilder.gradient.blocked.no_points": "No gradient points selected",
+  "message.texturebuilder.gradient.blocked.no_end": "No gradient end point selected",
+  "message.texturebuilder.gradient.blocked.other_dimension": "Gradient points are in %s",
+  "message.texturebuilder.gradient.blocked.need_two": "Include at least 2 slots in Gradient mode",
   "message.texturebuilder.no_more": "No more %s found",
   "message.texturebuilder.failed": "Texture Builder hit an error and is disabled for this session (see log)"
 }

@@ -121,7 +121,9 @@ Real logs for the user's install live in `%APPDATA%\.minecraft\logs\` (`latest.l
   label widgets they update. 26.2 API confirmed by `javap`: `AbstractSliderButton(int,int,int,int,
   Component,double)`, `protected double value`, abstract `updateMessage()`/`applyValue()`, and
   `keyPressed` arrow-key stepping once Enter/Space arms `canChangeValue`.
-- `mixin/client/MultiPlayerGameModeMixin` — `useItemOn` HEAD+TAIL, non-cancelling (PKT-02).
+- `mixin/client/MultiPlayerGameModeMixin` — `useItemOn` HEAD+TAIL. HEAD is `cancellable = true` since
+  v1.1.0 and cancels (returns `FAIL`) **only** for blocked Gradient placement (see Gradient mode);
+  otherwise non-cancelling (PKT-02).
 - `mixin/client/InventoryScreenMixin` — inventory **TB** button (FR-05). Targets **`InventoryScreen`**
   (`init`, `onRecipeBookButtonClick`, `containerTick`, all TAIL), exactly as SRS §7.2 prescribes.
   **Correction (2026-08-06):** an earlier revision targeted `AbstractContainerScreen.init` on the
@@ -219,7 +221,26 @@ differs; the held-item guard, restock (Pick Block / `RestockWatch`) and
 - `placement/GradientController` — keybind cycle, point state, slot pick, status line.
   `State` = NO_POINTS / OTHER_DIMENSION / START_ONLY / NO_AXIS / VALID; anything but VALID makes
   `selectSlot` return -1 and the weighted random pool decides (fallback = Texture-mode behaviour).
-  Fewer than 2 gradient-included slots also returns -1.
+  Fewer than 2 gradient-included slots also blocks (added 2026-10-25 at the user's request; HUD
+  "Include at least 2 slots in Gradient mode", checked after the point problems).
+  **Unusable points block placement (changed 2026-10-25 at the user's request):** NO_POINTS,
+  START_ONLY, OTHER_DIMENSION, NO_AXIS and fewer than 2 slots no longer fall back to the Texture
+  mix; `selectSlot`'s -1 → pool path is now only a safety net.
+  `blockedReason()` gives a gold HUD warning ("No gradient points selected", "No gradient end point
+  selected", "Gradient points are in <dim>", "Gradient start and end are the same") and
+  `PlacementRandomizer.beforePlacement` returns `true`, so the mixin cancels `useItemOn` at HEAD with
+  `FAIL`. Cancelling at HEAD is the only way to stop the server placing: vanilla sends one
+  `ServerboundUseItemOnPacket` from inside `useItemOn` and the server does both the block's own action
+  and the item placement from it.
+  **Chests/doors still work (user's choice):** before blocking, `blockGradientPlacement` lets the click
+  through untouched (no slot switch) when the clicked block's class overrides
+  `BlockBehaviour.useWithoutItem` (`hasUseAction`, reflection by Mojmap name, cached per class) and
+  vanilla would run it, i.e. not `isSecondaryUseActive()` with an item in either hand (vanilla's own
+  rule). Verified in a dev client 2026-10-25: true for chest, oak door, stone button, lever, crafting
+  table, furnace, oak trapdoor; false for stone, grass, planks, glass, dirt. ⚠️ Blocks that override
+  `useWithoutItem` but sometimes pass (e.g. redstone ore) still let the *held* block be placed.
+  The mixin change was verified with the CLAUDE.md `Class.forName` launch check: target loaded, no
+  mixin errors (config is `required` with `defaultRequire 1`, so a failed inject would crash).
   Placed position P is **predicted before placement** with the restock code's rule in pre-placement
   form: clicked pos if `BlockState.canBeReplaced()` (no-arg), else `clicked.relative(face)`.
   Dimension id = `level.dimension().identifier().toString()`.
@@ -310,7 +331,8 @@ differs; the held-item guard, restock (Pick Block / `RestockWatch`) and
   `StringWidget.setMaxWidth(int, TextOverflow.SCROLLING)`; `CycleButton.Builder.withValues(T...)`.
   Side finding: `GuiGraphicsExtractor.item(ItemStack,int,int)` **does exist in 26.3**, so decision 4
   (names instead of icons) could be revisited.
-- No mixin was added or changed for this feature.
+- Mixin: `MultiPlayerGameModeMixin` HEAD became cancellable on 2026-10-25 (blocked Gradient
+  placement). No other mixin was added or changed.
 
 ## How to build
 ```bash
