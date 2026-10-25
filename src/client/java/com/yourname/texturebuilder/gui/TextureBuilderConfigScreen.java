@@ -92,6 +92,9 @@ public class TextureBuilderConfigScreen extends Screen {
     // the Transition slider end exactly where the Item column does.
     private static final int SIDE_BUTTON_WIDTH = COL_INCLUDE + GRID_SPACING + COL_EFFECTIVE;
     private static final int BAR_WIDTH = ROW_WIDTH - GRID_SPACING - SIDE_BUTTON_WIDTH;
+    // Transition row: [Transition 162][Gradient: 1D/2D/3D 82][Clear points 95] = 343 with spacing.
+    private static final int SHAPE_BUTTON_WIDTH = 82;
+    private static final int TRANSITION_WIDTH = BAR_WIDTH - GRID_SPACING - SHAPE_BUTTON_WIDTH;
 
     private static final int FOOTER_BUTTON_WIDTH = 120;
 
@@ -263,6 +266,7 @@ public class TextureBuilderConfigScreen extends Screen {
 
         LinearLayout transitionRow = LinearLayout.horizontal().spacing(GRID_SPACING);
         transitionRow.addChild(new TransitionSlider(config.gradientTransition));
+        transitionRow.addChild(shapeButton(config.gradientShape));
         transitionRow.addChild(Button.builder(Component.translatable("text.texturebuilder.gradient.clear_points"),
                 b -> {
                     ModConfig.get().clearGradientPoints();
@@ -466,7 +470,7 @@ public class TextureBuilderConfigScreen extends Screen {
     /** Gradient mode's global blend width, 0-100%, written straight to the live config. */
     private static class TransitionSlider extends AbstractSliderButton {
         TransitionSlider(int transition) {
-            super(0, 0, BAR_WIDTH, BUTTON_HEIGHT, Component.empty(),
+            super(0, 0, TRANSITION_WIDTH, BUTTON_HEIGHT, Component.empty(),
                     Mth.clamp(transition / (double) ModConfig.TRANSITION_MAX, 0.0D, 1.0D));
             this.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.transition.tooltip")));
             this.updateMessage();
@@ -505,6 +509,22 @@ public class TextureBuilderConfigScreen extends Screen {
                 .displayOnlyValue()
                 .create(0, 0, INCLUDE_BUTTON_WIDTH, height, Component.translatable(narrationKey),
                         (button, value) -> onChange.accept(value));
+    }
+
+    /**
+     * The 1D / 2D / 3D gradient shape button: which axes the fade runs across. Applies to the live
+     * config at once; the points line below refreshes every tick, so it re-checks the points for
+     * the new shape straight away.
+     */
+    private static CycleButton<Integer> shapeButton(int shape) {
+        CycleButton<Integer> button = CycleButton.<Integer>builder(
+                        value -> Component.translatable("text.texturebuilder.gradient.shape." + value), shape)
+                .withValues(1, 2, 3)
+                .create(0, 0, SHAPE_BUTTON_WIDTH, BUTTON_HEIGHT,
+                        Component.translatable("text.texturebuilder.gradient.shape"),
+                        (b, value) -> ModConfig.get().gradientShape = value);
+        button.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.shape.tooltip")));
+        return button;
     }
 
     /**

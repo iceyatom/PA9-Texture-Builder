@@ -39,9 +39,12 @@ public final class GradientController {
         OTHER_DIMENSION,
         /** A start point but no end point yet. */
         START_ONLY,
-        /** Both points set, but no single longest axis (a tie, or identical points). */
+        /**
+         * Both points set, but they don't work for the current 1D/2D/3D shape (identical points, a
+         * tie, or too few differing axes; see {@link GradientHelper#checkAxes}).
+         */
         NO_AXIS,
-        /** Both points set with a clear axis: gradient placement is active. */
+        /** Both points set and valid for the current shape: gradient placement is active. */
         VALID
     }
 
@@ -68,17 +71,21 @@ public final class GradientController {
         if (cfg.gradientEnd == null) {
             return State.START_ONLY;
         }
-        return axis(cfg) == GradientHelper.AXIS_NONE ? State.NO_AXIS : State.VALID;
+        return check(cfg).valid() ? State.VALID : State.NO_AXIS;
     }
 
-    /** The axis of the stored points, or {@link GradientHelper#AXIS_NONE} if either is unset. */
-    public static int axis(ModConfig cfg) {
+    /**
+     * Which axes the stored points use for the current shape ({@code gradient_shape}), or why they
+     * can't be used. Unset points report {@link GradientHelper#PROBLEM_SAME}; callers check
+     * {@link #state} first.
+     */
+    public static GradientHelper.AxisCheck check(ModConfig cfg) {
         int[] s = cfg.gradientStart;
         int[] e = cfg.gradientEnd;
         if (s == null || e == null) {
-            return GradientHelper.AXIS_NONE;
+            return new GradientHelper.AxisCheck(0, GradientHelper.PROBLEM_SAME, 0, 0);
         }
-        return GradientHelper.selectAxis(s[0], s[1], s[2], e[0], e[1], e[2]);
+        return GradientHelper.checkAxes(cfg.gradientShape, s[0], s[1], s[2], e[0], e[1], e[2]);
     }
 
     /**
@@ -121,16 +128,20 @@ public final class GradientController {
 
         cfg.gradientEnd = point;
         cfg.save();
-        int axis = axis(cfg);
-        if (axis == GradientHelper.AXIS_NONE) {
-            TextureBuilderHud.showMessage(noAxisMessage(cfg));
-        } else {
+        GradientHelper.AxisCheck check = check(cfg);
+        if (!check.valid()) {
+            TextureBuilderHud.showMessage(problemMessage(cfg, check));
+        } else if (Integer.bitCount(check.axes()) == 1) {
             // Green confirmation, the counterpart of the gold refusal warnings: the gradient is
             // ready, along this axis, spanning this many blocks (both endpoints included).
             int[] s = cfg.gradientStart;
             long length = GradientHelper.largestDifference(s[0], s[1], s[2], point[0], point[1], point[2]) + 1;
             TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.gradient.end_set",
-                            point[0], point[1], point[2], GradientHelper.axisName(axis), length)
+                            point[0], point[1], point[2], GradientHelper.axesName(check.axes()), length)
+                    .withStyle(ChatFormatting.GREEN));
+        } else {
+            TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.gradient.end_set_multi",
+                            point[0], point[1], point[2], runsPhrase(check.axes()))
                     .withStyle(ChatFormatting.GREEN));
         }
     }
@@ -153,15 +164,19 @@ public final class GradientController {
         if (placed == null) {
             return -1;
         }
-        int axis = axis(cfg);
-        int p = coordinate(placed, axis);
-        double t = GradientHelper.positionT(p, cfg.gradientStart[axis], cfg.gradientEnd[axis]);
+        int axes = check(cfg).axes();
+        int[] s = cfg.gradientStart;
+        int[] e = cfg.gradientEnd;
+        // Projection onto the start-to-end line over the shape's axes: 1D is the plain per-axis
+        // fraction, 2D/3D fade diagonally with straight bands at right angles to the line.
+        double t = GradientHelper.projectT(placed.getX(), placed.getY(), placed.getZ(),
+                s[0], s[1], s[2], e[0], e[1], e[2], axes);
         int index = GradientHelper.selectIndex(t, cfg.gradientBoundaries,
                 cfg.gradientTransition / 100.0D, random.nextDouble());
         int slot = palette[index];
         if (cfg.debugLogging) {
-            TextureBuilder.LOGGER.info("[TextureBuilder] gradient draw at {}: axis {}, t={}, entry {} -> slot {}",
-                    placed.toShortString(), GradientHelper.axisName(axis), String.format("%.3f", t), index + 1, slot + 1);
+            TextureBuilder.LOGGER.info("[TextureBuilder] gradient draw at {}: axes {}, t={}, entry {} -> slot {}",
+                    placed.toShortString(), GradientHelper.axesName(axes), String.format("%.3f", t), index + 1, slot + 1);
         }
         return slot;
     }
@@ -179,7 +194,7 @@ public final class GradientController {
             case START_ONLY -> Component.translatable("message.texturebuilder.gradient.blocked.no_end");
             case OTHER_DIMENSION -> Component.translatable("message.texturebuilder.gradient.blocked.other_dimension",
                     cfg.gradientDimension);
-            case NO_AXIS -> noAxisMessage(cfg);
+            case NO_AXIS -> problemMessage(cfg, check(cfg));
             case VALID -> cfg.gradientPalette().length < GradientHelper.MIN_ENTRIES
                     ? Component.translatable("message.texturebuilder.gradient.blocked.need_two")
                     : null;
@@ -230,14 +245,6 @@ public final class GradientController {
         return clicked.relative(hit.getDirection());
     }
 
-    private static int coordinate(BlockPos pos, int axis) {
-        return switch (axis) {
-            case GradientHelper.AXIS_X -> pos.getX();
-            case GradientHelper.AXIS_Y -> pos.getY();
-            default -> pos.getZ();
-        };
-    }
-
     private static BlockPos lookedAtBlock(Minecraft client) {
         HitResult hit = client.hitResult;
         if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
@@ -259,18 +266,12 @@ public final class GradientController {
                     cfg.gradientDimension).withStyle(ChatFormatting.GOLD);
             case START_ONLY -> Component.translatable("text.texturebuilder.gradient.points.start_only",
                     point(cfg.gradientStart));
-            case NO_AXIS -> {
-                MutableComponent tie = tieDetail(cfg);
-                yield (tie == null
-                        ? Component.translatable("text.texturebuilder.gradient.points.same",
-                                point(cfg.gradientStart), point(cfg.gradientEnd))
-                        : Component.translatable("text.texturebuilder.gradient.points.unclear",
-                                point(cfg.gradientStart), point(cfg.gradientEnd), tie))
-                        .withStyle(ChatFormatting.RED);
-            }
+            case NO_AXIS -> Component.translatable("text.texturebuilder.gradient.points.problem",
+                    point(cfg.gradientStart), point(cfg.gradientEnd), problemMessage(cfg, check(cfg)))
+                    .withStyle(ChatFormatting.RED);
             case VALID -> Component.translatable("text.texturebuilder.gradient.points.valid",
-                    point(cfg.gradientStart), point(cfg.gradientEnd),
-                    GradientHelper.axisName(axis(cfg))).withStyle(ChatFormatting.GREEN);
+                    point(cfg.gradientStart), point(cfg.gradientEnd), runsPhrase(check(cfg).axes()))
+                    .withStyle(ChatFormatting.GREEN);
         };
     }
 
@@ -279,40 +280,61 @@ public final class GradientController {
     }
 
     /**
-     * HUD message for points with no single longest axis: "Gradient axis unclear: X and Z both
-     * differ by 12 blocks" for a tie, or "Gradient start and end are the same" when the same block
-     * was picked twice (the only case where that wording is accurate).
+     * Why the points don't work for the current shape:
+     * <ul>
+     *   <li>same block twice: "Gradient start and end are the same";</li>
+     *   <li>1D tie: "Gradient axis unclear: X and Z both differ by 12 blocks";</li>
+     *   <li>2D tie on the axis to ignore: "2D gradient unclear: X, Y and Z all differ by 12 blocks";</li>
+     *   <li>2D with one differing axis: "2D gradient needs the points to differ on two axes (only X
+     *       differs)";</li>
+     *   <li>3D with an axis that matches: "3D gradient needs the points to differ on X, Y and Z (Y
+     *       is the same)".</li>
+     * </ul>
      */
-    private static MutableComponent noAxisMessage(ModConfig cfg) {
-        MutableComponent tie = tieDetail(cfg);
-        return tie == null
-                ? Component.translatable("message.texturebuilder.gradient.same")
-                : Component.translatable("message.texturebuilder.gradient.unclear", tie);
+    private static MutableComponent problemMessage(ModConfig cfg, GradientHelper.AxisCheck check) {
+        return switch (check.problem()) {
+            case GradientHelper.PROBLEM_TIE -> Component.translatable(cfg.gradientShape == 2
+                            ? "message.texturebuilder.gradient.unclear_2d" : "message.texturebuilder.gradient.unclear",
+                    tieDetail(check.problemAxes(), check.distance()));
+            case GradientHelper.PROBLEM_TOO_FEW -> cfg.gradientShape == 3
+                    ? Component.translatable("message.texturebuilder.gradient.need_three_axes",
+                            sameAxes(check.problemAxes()))
+                    : Component.translatable("message.texturebuilder.gradient.need_two_axes",
+                            GradientHelper.axesName(check.problemAxes()));
+            default -> Component.translatable("message.texturebuilder.gradient.same");
+        };
     }
 
-    /**
-     * "X and Z both differ by 12 blocks" or "X, Y and Z all differ by 12 blocks" for tied points,
-     * or {@code null} when the points are identical (or either is unset).
-     */
-    private static MutableComponent tieDetail(ModConfig cfg) {
-        int[] s = cfg.gradientStart;
-        int[] e = cfg.gradientEnd;
-        if (s == null || e == null) {
-            return null;
-        }
-        int mask = GradientHelper.tiedAxes(s[0], s[1], s[2], e[0], e[1], e[2]);
-        if (mask == 0) {
-            return null;
-        }
-        long blocks = GradientHelper.largestDifference(s[0], s[1], s[2], e[0], e[1], e[2]);
+    /** "X and Z both differ by 12 blocks" or "X, Y and Z all differ by 12 blocks". */
+    private static MutableComponent tieDetail(int mask, long blocks) {
         Component distance = blocks == 1
                 ? Component.translatable("text.texturebuilder.gradient.distance.one")
                 : Component.translatable("text.texturebuilder.gradient.distance.many", blocks);
         if (Integer.bitCount(mask) == 3) {
             return Component.translatable("text.texturebuilder.gradient.tie.all", distance);
         }
-        String first = (mask & GradientHelper.MASK_X) != 0 ? "X" : "Y";
-        String second = (mask & GradientHelper.MASK_Z) != 0 ? "Z" : "Y";
-        return Component.translatable("text.texturebuilder.gradient.tie.two", first, second, distance);
+        String names = GradientHelper.axesName(mask);
+        return Component.translatable("text.texturebuilder.gradient.tie.two",
+                String.valueOf(names.charAt(0)), String.valueOf(names.charAt(1)), distance);
+    }
+
+    /** "Y is the same" / "Y and Z are the same", for the 3D message. */
+    private static MutableComponent sameAxes(int mask) {
+        String names = GradientHelper.axesName(mask);
+        return names.length() == 1
+                ? Component.translatable("text.texturebuilder.gradient.same.one", names)
+                : Component.translatable("text.texturebuilder.gradient.same.two",
+                        String.valueOf(names.charAt(0)), String.valueOf(names.charAt(1)));
+    }
+
+    /** "along X" (1D), "across X and Z (2D)" or "across X, Y and Z (3D)". */
+    private static MutableComponent runsPhrase(int axes) {
+        String names = GradientHelper.axesName(axes);
+        return switch (names.length()) {
+            case 1 -> Component.translatable("text.texturebuilder.gradient.runs.one", names);
+            case 2 -> Component.translatable("text.texturebuilder.gradient.runs.two",
+                    String.valueOf(names.charAt(0)), String.valueOf(names.charAt(1)));
+            default -> Component.translatable("text.texturebuilder.gradient.runs.three");
+        };
     }
 }

@@ -79,6 +79,132 @@ public final class GradientHelper {
         return Math.max(Math.abs((long) ex - sx), Math.max(Math.abs((long) ey - sy), Math.abs((long) ez - sz)));
     }
 
+    // ---- 1D / 2D / 3D gradients ----------------------------------------------------------------
+
+    /** {@link AxisCheck#problem()} values. */
+    public static final int PROBLEM_NONE = 0;
+    /** Start and end are the same block. */
+    public static final int PROBLEM_SAME = 1;
+    /**
+     * Can't tell which axes to use. 1D: the longest axis is tied ({@code problemAxes} = the tied
+     * axes, {@code distance} = their difference). 2D: the axis to ignore is tied
+     * ({@code problemAxes} = the tied smallest axes, {@code distance} = their difference).
+     */
+    public static final int PROBLEM_TIE = 2;
+    /**
+     * Not enough axes differ for the shape. 2D: only one axis differs ({@code problemAxes} = that
+     * axis). 3D: some axes don't differ ({@code problemAxes} = the axes that are the same).
+     */
+    public static final int PROBLEM_TOO_FEW = 3;
+
+    /**
+     * Result of {@link #checkAxes}: the axes the gradient runs across (a mask of
+     * {@link #MASK_X}/{@link #MASK_Y}/{@link #MASK_Z}; 0 when invalid), or why it can't run.
+     */
+    public record AxisCheck(int axes, int problem, int problemAxes, long distance) {
+        public boolean valid() {
+            return problem == PROBLEM_NONE;
+        }
+    }
+
+    /**
+     * Which axes a gradient of {@code shape} (1, 2 or 3) uses for these points, or why it can't.
+     * <ul>
+     *   <li>1D: the single axis with the largest difference; any tie is invalid.</li>
+     *   <li>2D (lenient): the two axes that differ most, ignoring the smallest. Invalid when the
+     *       smallest is tied (can't tell which to ignore, e.g. a cube's corners) or when only one
+     *       axis differs.</li>
+     *   <li>3D: all three axes; invalid unless every axis differs.</li>
+     * </ul>
+     * Identical points are {@link #PROBLEM_SAME} for every shape.
+     */
+    public static AxisCheck checkAxes(int shape, int sx, int sy, int sz, int ex, int ey, int ez) {
+        long[] d = {Math.abs((long) ex - sx), Math.abs((long) ey - sy), Math.abs((long) ez - sz)};
+        int[] bit = {MASK_X, MASK_Y, MASK_Z};
+        if (d[0] == 0 && d[1] == 0 && d[2] == 0) {
+            return new AxisCheck(0, PROBLEM_SAME, 0, 0);
+        }
+        switch (shape) {
+            case 2 -> {
+                long min = Math.min(d[0], Math.min(d[1], d[2]));
+                int minMask = 0;
+                for (int i = 0; i < 3; i++) {
+                    if (d[i] == min) {
+                        minMask |= bit[i];
+                    }
+                }
+                if (Integer.bitCount(minMask) == 1) {
+                    return new AxisCheck((MASK_X | MASK_Y | MASK_Z) & ~minMask, PROBLEM_NONE, 0, 0);
+                }
+                if (min == 0) {
+                    // Two axes are 0, so only one differs.
+                    return new AxisCheck(0, PROBLEM_TOO_FEW, (MASK_X | MASK_Y | MASK_Z) & ~minMask, 0);
+                }
+                return new AxisCheck(0, PROBLEM_TIE, minMask, min);
+            }
+            case 3 -> {
+                int same = 0;
+                for (int i = 0; i < 3; i++) {
+                    if (d[i] == 0) {
+                        same |= bit[i];
+                    }
+                }
+                return same == 0
+                        ? new AxisCheck(MASK_X | MASK_Y | MASK_Z, PROBLEM_NONE, 0, 0)
+                        : new AxisCheck(0, PROBLEM_TOO_FEW, same, 0);
+            }
+            default -> {
+                int tie = tiedAxes(sx, sy, sz, ex, ey, ez);
+                if (tie != 0) {
+                    return new AxisCheck(0, PROBLEM_TIE, tie, largestDifference(sx, sy, sz, ex, ey, ez));
+                }
+                int axis = selectAxis(sx, sy, sz, ex, ey, ez);
+                return new AxisCheck(bit[axis], PROBLEM_NONE, 0, 0);
+            }
+        }
+    }
+
+    /**
+     * Position of {@code p} along the start→end line, using only the {@code axes} in the mask:
+     * {@code t = clamp((P-S)·(E-S) / |E-S|², 0, 1)} with the vectors restricted to those axes.
+     * The bands are straight and at right angles to the line, so in 2D/3D the fade runs
+     * diagonally, and blocks past either end clamp to the first or last entry. With one axis this
+     * is exactly {@link #positionT}.
+     */
+    public static double projectT(int px, int py, int pz, int sx, int sy, int sz, int ex, int ey, int ez,
+                                  int axes) {
+        double num = 0.0D;
+        double den = 0.0D;
+        if ((axes & MASK_X) != 0) {
+            num += ((double) px - sx) * ((double) ex - sx);
+            den += ((double) ex - sx) * ((double) ex - sx);
+        }
+        if ((axes & MASK_Y) != 0) {
+            num += ((double) py - sy) * ((double) ey - sy);
+            den += ((double) ey - sy) * ((double) ey - sy);
+        }
+        if ((axes & MASK_Z) != 0) {
+            num += ((double) pz - sz) * ((double) ez - sz);
+            den += ((double) ez - sz) * ((double) ez - sz);
+        }
+        return den == 0.0D ? 0.0D : clamp01(num / den);
+    }
+
+    /** "X", "XZ", "XYZ"... for an axes mask, in X, Y, Z order. */
+    public static String axesName(int axes) {
+        StringBuilder sb = new StringBuilder();
+        if ((axes & MASK_X) != 0) {
+            sb.append('X');
+        }
+        if ((axes & MASK_Y) != 0) {
+            sb.append('Y');
+        }
+        if ((axes & MASK_Z) != 0) {
+            sb.append('Z');
+        }
+        return sb.toString();
+    }
+
     /** Display letter for an axis index ("X", "Y", "Z"), or "-" for {@link #AXIS_NONE}. */
     public static String axisName(int axis) {
         return switch (axis) {

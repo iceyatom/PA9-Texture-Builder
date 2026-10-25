@@ -225,6 +225,24 @@ differs; the held-item guard, restock (Pick Block / `RestockWatch`) and
   `selectSlot` return -1 and the weighted random pool decides (fallback = Texture-mode behaviour).
   Fewer than 2 gradient-included slots also blocks (added 2026-10-25 at the user's request; HUD
   "Include at least 2 slots in Gradient mode", checked after the point problems).
+  **1D / 2D / 3D gradients (added 2026-10-25 at the user's request; design choices were the user's):**
+  `ModConfig.gradientShape` (1-3, TOML `gradient_shape = "1d"|"2d"|"3d"`, default 1D) is cycled by
+  a "Gradient: 1D/2D/3D" `CycleButton` on the Transition row ([Transition 162][shape 82][Clear
+  points 95] = 343). `GradientHelper.checkAxes(shape, S, E)` returns an `AxisCheck(axes, problem,
+  problemAxes, distance)`: 1D = the unique longest axis (tie → PROBLEM_TIE); **2D (lenient)** = the
+  two axes that differ most, ignoring the smallest (PROBLEM_TIE if the smallest is tied, e.g. cube
+  corners or dy = dz = 3; PROBLEM_TOO_FEW if only one axis differs); 3D = all three (PROBLEM_TOO_FEW
+  naming the axes that are the same); identical → PROBLEM_SAME for every shape. **Position is a
+  projection**: `projectT` = clamp((P−S)·(E−S)/|E−S|², 0, 1) over the shape's axes only, so 2D/3D
+  fade diagonally with straight bands at right angles to the S→E line (the user picked this over
+  "box corner to corner" and "rings from the start"); with one axis it equals `positionT`. Messages:
+  "2D gradient unclear: Y and Z both differ by 3 blocks", "2D gradient needs the points to differ
+  on two axes (only X differs)", "3D gradient needs the points to differ on X, Y and Z (Y is the
+  same)"; green end-set "…, runs across X and Z (2D)"; points line "…, across X and Z (2D)" or
+  "Start …, end …: <problem>". Changing the shape re-checks the stored points immediately (the
+  points line refreshes every tick; placement checks on every click). Standalone suite now 92
+  checks (validity per shape, 1D projection == positionT, 2D square/rectangle/reversed/ignored Y,
+  3D cube). All 27 shape × point-pair messages were checked in a dev client.
   **Success confirmation (added 2026-10-25 at the user's request):** when the end point gives a
   clear axis, the HUD shows a **green** "Gradient end set: 12 64 0, runs along X (13 blocks)", the
   counterpart of the gold refusals; the length counts both endpoints (`largestDifference + 1`, so

@@ -126,6 +126,11 @@ public final class ModConfig {
     public double[] gradientBoundaries = GradientHelper.evenBoundaries(2);
     /** Blend-zone width around each boundary: 0 (hard bands) to 100 (full fade), percent. */
     public int gradientTransition = 50;
+    /**
+     * Gradient shape: 1 = along one axis (the longest), 2 = across the two axes that differ most,
+     * 3 = across all three. Cycled with the 1D/2D/3D button on the config screen.
+     */
+    public int gradientShape = 1;
     /** Gradient start block {x, y, z}, or {@code null} when unset. */
     public int[] gradientStart = null;
     /** Gradient end block {x, y, z}, or {@code null} when unset. */
@@ -232,6 +237,7 @@ public final class ModConfig {
                 case "gradient_included" -> cfg.gradientIncluded = parseSlotSet(value);
                 case "gradient_boundaries" -> cfg.gradientBoundaries = parseDoubleArray(value);
                 case "gradient_transition" -> cfg.gradientTransition = Integer.parseInt(value);
+                case "gradient_shape" -> cfg.gradientShape = parseShape(value);
                 case "gradient_start" -> cfg.gradientStart = parsePoint(value);
                 case "gradient_end" -> cfg.gradientEnd = parsePoint(value);
                 case "gradient_dimension" -> cfg.gradientDimension = value;
@@ -292,6 +298,19 @@ public final class ModConfig {
         return set;
     }
 
+    /** {@code "1d"}/{@code "2d"}/{@code "3d"} (or a bare 1-3) to the shape number. */
+    private static int parseShape(String value) {
+        String v = value.trim().toLowerCase(Locale.ROOT);
+        if (v.endsWith("d")) {
+            v = v.substring(0, v.length() - 1);
+        }
+        int shape = Integer.parseInt(v);
+        if (shape < 1 || shape > 3) {
+            throw new IllegalArgumentException(value);
+        }
+        return shape;
+    }
+
     /** {@code [x, y, z]} gives a point; {@code []} gives {@code null} (unset). */
     private static int[] parsePoint(String value) {
         int[] p = parseIntArray(value);
@@ -317,6 +336,7 @@ public final class ModConfig {
             gradientBoundaries = GradientHelper.evenBoundaries(entries);
         }
         gradientTransition = Math.max(TRANSITION_MIN, Math.min(TRANSITION_MAX, gradientTransition));
+        gradientShape = Math.max(1, Math.min(3, gradientShape));
         if (gradientStart == null) {
             gradientEnd = null;
         }
@@ -474,6 +494,11 @@ public final class ModConfig {
                 # fully into the next.
                 gradient_transition = %d
 
+                # Gradient shape: "1d" fades along the one axis the points differ on most; "2d"
+                # fades diagonally across the two axes that differ most (the smallest is ignored);
+                # "3d" fades diagonally across all three. Changed with the 1D/2D/3D button.
+                gradient_shape = "%dd"
+
                 # Gradient points as [x, y, z] ([] = unset) and the dimension they belong to.
                 # Set with the "Set Gradient Point" keybind. Ignored in other dimensions.
                 gradient_start = %s
@@ -481,7 +506,7 @@ public final class ModConfig {
                 gradient_dimension = "%s"
                 """.formatted(enabled, toggleKeybind, slots, restoreSlotAfterPlacement,
                 autoNormalizeDisplay, restockMessageDurationMs, debugLogging,
-                mode.id(), palette, bounds, gradientTransition,
+                mode.id(), palette, bounds, gradientTransition, gradientShape,
                 formatPoint(gradientStart), formatPoint(gradientEnd), gradientDimension);
         try {
             Files.createDirectories(configPath().getParent());
@@ -526,6 +551,7 @@ public final class ModConfig {
         lines.add("gradient slots = " + (pal.isEmpty() ? "none" : pal)
                 + (gradientSlots.length < GradientHelper.MIN_ENTRIES ? " (need at least 2)" : ""));
         lines.add("gradient_transition = " + gradientTransition + "%");
+        lines.add("gradient_shape = " + gradientShape + "D");
         return lines;
     }
 }

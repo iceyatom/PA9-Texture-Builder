@@ -82,7 +82,14 @@ source refer to that document.
      want the fade. You need at least 2. With fewer, Gradient mode won't place and shows a warning. Gradient
      mode remembers its own Included slots, so this doesn't change your Texture pool. The
      **Eff. %** column shows how much of the line each included slot gets.
-  4. **Shape the fade.** Below the slot rows, the **distribution** bar shows each block's share of the line, labelled
+  4. **Pick 1D, 2D or 3D.** The **Gradient: 1D** button next to Transition cycles the shape.
+     *1D* fades along the one axis your points are farthest apart on. *2D* fades diagonally across
+     the two axes that differ most and ignores the third, so opposite corners of a floor give a
+     corner-to-corner fade. *3D* fades diagonally through all three axes; the points must differ
+     on X, Y and Z. In 2D and 3D the bands are straight lines (or planes) at right angles to the
+     start-to-end line. If the points don't suit the shape, the message says why, e.g. "2D
+     gradient needs the points to differ on two axes (only X differs)".
+  5. **Shape the fade.** Below the slot rows, the **distribution** bar shows each block's share of the line, labelled
      with its name. Drag a handle to move a boundary (handles can't pass each other), or select
      the bar and press Enter/Space to pick a handle and the arrow keys to nudge it (Shift for
      bigger steps). **Reset** spreads the blocks evenly again. **Transition** sets how soft each boundary is: 0% gives hard bands, 100% makes
