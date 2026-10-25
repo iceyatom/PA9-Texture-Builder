@@ -65,9 +65,12 @@ source refer to that document.
   2. **Set the two end points.** Bind **"Set Gradient Point"** in Options → Controls (unbound by
      default). Look at a block and press it once to set the **start**, look at another block and
      press again to set the **end**, and press a third time to **clear** both. A brief message
-     confirms each press ("Gradient start set: x y z", …). The fade runs along whichever of X, Y or
-     Z the two points are farthest apart on. If two axes tie (or both points are the same block),
-     you'll see "Gradient start and end are the same".
+     confirms each press ("Gradient start set: x y z", …). When the end point gives a clear axis, the
+     confirmation turns green and names it, e.g. "Gradient end set: 12 64 0, runs along X (13 blocks)". The fade runs along whichever of X, Y or
+     Z the two points are farthest apart on. If two or three axes tie, for example opposite corners
+     of a square, you'll see "Gradient axis unclear: X and Z both differ by 12 blocks"; move one
+     point so a single axis is longest. Picking the same block twice shows "Gradient start and end
+     are the same".
      **Until both points are set (in this dimension, on a clear axis), Gradient mode won't place
      blocks.** Trying to shows a warning such as "No gradient points selected". Right-clicking
      chests, doors, buttons and other usable blocks still works.

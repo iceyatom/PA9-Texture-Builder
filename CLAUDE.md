@@ -216,18 +216,31 @@ differs; the held-item guard, restock (Pick Block / `RestockWatch`) and
   at transition 0 for every t; t=0 → entry 0 and t=1 → entry N-1 for N=2..9; N=2 zone edges;
   50/50 at each boundary (100k draws: 0.4990/0.5011/0.5001); uneven segments probed at 5 points per
   zone, 100k draws each, all within 0.01 of the linear ramp; no zone overlap at 100%; min-gap and
-  zero-width segments stay in range. The test lives outside the repo (scratchpad); recreate it with
+  zero-width segments stay in range. 2026-10-25: + `tiedAxes`/`largestDifference` (X/Z square corners,
+  opposite signs, X/Y, Y/Z, cube corners → all three, clear winner → 0, identical → 0): 63 checks
+  pass. The test lives outside the repo (scratchpad); recreate it with
   plain `javac` against `GradientHelper.java` if needed.
 - `placement/GradientController` — keybind cycle, point state, slot pick, status line.
   `State` = NO_POINTS / OTHER_DIMENSION / START_ONLY / NO_AXIS / VALID; anything but VALID makes
   `selectSlot` return -1 and the weighted random pool decides (fallback = Texture-mode behaviour).
   Fewer than 2 gradient-included slots also blocks (added 2026-10-25 at the user's request; HUD
   "Include at least 2 slots in Gradient mode", checked after the point problems).
+  **Success confirmation (added 2026-10-25 at the user's request):** when the end point gives a
+  clear axis, the HUD shows a **green** "Gradient end set: 12 64 0, runs along X (13 blocks)", the
+  counterpart of the gold refusals; the length counts both endpoints (`largestDifference + 1`, so
+  always ≥ 2).
+  **NO_AXIS wording (changed 2026-10-25 at the user's request):** a tie is no longer reported as
+  "start and end are the same". `GradientHelper.tiedAxes` returns the tied axes as a bit mask
+  (0 for a clear winner *and* for identical points) and `largestDifference` the distance, so the HUD
+  says "Gradient axis unclear: X and Z both differ by 12 blocks" or "...: X, Y and Z all differ
+  by 12 blocks" ("1 block" singular). Only identical points keep "Gradient start and end are the
+  same". Same text in the end-set HUD message, the blocked-placement warning, the config screen's
+  points line ("Start …, end …: axis unclear, X and Z both differ by 12 blocks") and status.
   **Unusable points block placement (changed 2026-10-25 at the user's request):** NO_POINTS,
   START_ONLY, OTHER_DIMENSION, NO_AXIS and fewer than 2 slots no longer fall back to the Texture
   mix; `selectSlot`'s -1 → pool path is now only a safety net.
   `blockedReason()` gives a gold HUD warning ("No gradient points selected", "No gradient end point
-  selected", "Gradient points are in <dim>", "Gradient start and end are the same") and
+  selected", "Gradient points are in <dim>", the NO_AXIS message below) and
   `PlacementRandomizer.beforePlacement` returns `true`, so the mixin cancels `useItemOn` at HEAD with
   `FAIL`. Cancelling at HEAD is the only way to stop the server placing: vanilla sends one
   `ServerboundUseItemOnPacket` from inside `useItemOn` and the server does both the block's own action

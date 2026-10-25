@@ -52,6 +52,33 @@ public final class GradientHelper {
         return dx == max ? AXIS_X : dy == max ? AXIS_Y : AXIS_Z;
     }
 
+    /** Bits for {@link #tiedAxes}: X = 1, Y = 2, Z = 4. */
+    public static final int MASK_X = 1;
+    public static final int MASK_Y = 2;
+    public static final int MASK_Z = 4;
+
+    /**
+     * Which axes share the largest absolute difference when two or three of them do, as a bit
+     * mask of {@link #MASK_X}/{@link #MASK_Y}/{@link #MASK_Z}. Returns 0 when one axis wins
+     * outright, and 0 for identical points (no axis differs at all, so nothing "ties").
+     */
+    public static int tiedAxes(int sx, int sy, int sz, int ex, int ey, int ez) {
+        long dx = Math.abs((long) ex - sx);
+        long dy = Math.abs((long) ey - sy);
+        long dz = Math.abs((long) ez - sz);
+        long max = Math.max(dx, Math.max(dy, dz));
+        if (max == 0) {
+            return 0;
+        }
+        int mask = (dx == max ? MASK_X : 0) | (dy == max ? MASK_Y : 0) | (dz == max ? MASK_Z : 0);
+        return Integer.bitCount(mask) >= 2 ? mask : 0;
+    }
+
+    /** The largest absolute difference between start and end on any axis. */
+    public static long largestDifference(int sx, int sy, int sz, int ex, int ey, int ez) {
+        return Math.max(Math.abs((long) ex - sx), Math.max(Math.abs((long) ey - sy), Math.abs((long) ez - sz)));
+    }
+
     /** Display letter for an axis index ("X", "Y", "Z"), or "-" for {@link #AXIS_NONE}. */
     public static String axisName(int axis) {
         return switch (axis) {

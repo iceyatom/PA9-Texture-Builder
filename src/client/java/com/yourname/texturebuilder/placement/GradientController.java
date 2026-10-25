@@ -121,11 +121,17 @@ public final class GradientController {
 
         cfg.gradientEnd = point;
         cfg.save();
-        if (axis(cfg) == GradientHelper.AXIS_NONE) {
-            TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.gradient.same"));
+        int axis = axis(cfg);
+        if (axis == GradientHelper.AXIS_NONE) {
+            TextureBuilderHud.showMessage(noAxisMessage(cfg));
         } else {
+            // Green confirmation, the counterpart of the gold refusal warnings: the gradient is
+            // ready, along this axis, spanning this many blocks (both endpoints included).
+            int[] s = cfg.gradientStart;
+            long length = GradientHelper.largestDifference(s[0], s[1], s[2], point[0], point[1], point[2]) + 1;
             TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.gradient.end_set",
-                    point[0], point[1], point[2]));
+                            point[0], point[1], point[2], GradientHelper.axisName(axis), length)
+                    .withStyle(ChatFormatting.GREEN));
         }
     }
 
@@ -173,7 +179,7 @@ public final class GradientController {
             case START_ONLY -> Component.translatable("message.texturebuilder.gradient.blocked.no_end");
             case OTHER_DIMENSION -> Component.translatable("message.texturebuilder.gradient.blocked.other_dimension",
                     cfg.gradientDimension);
-            case NO_AXIS -> Component.translatable("message.texturebuilder.gradient.same");
+            case NO_AXIS -> noAxisMessage(cfg);
             case VALID -> cfg.gradientPalette().length < GradientHelper.MIN_ENTRIES
                     ? Component.translatable("message.texturebuilder.gradient.blocked.need_two")
                     : null;
@@ -253,8 +259,15 @@ public final class GradientController {
                     cfg.gradientDimension).withStyle(ChatFormatting.GOLD);
             case START_ONLY -> Component.translatable("text.texturebuilder.gradient.points.start_only",
                     point(cfg.gradientStart));
-            case NO_AXIS -> Component.translatable("text.texturebuilder.gradient.points.same",
-                    point(cfg.gradientStart), point(cfg.gradientEnd)).withStyle(ChatFormatting.RED);
+            case NO_AXIS -> {
+                MutableComponent tie = tieDetail(cfg);
+                yield (tie == null
+                        ? Component.translatable("text.texturebuilder.gradient.points.same",
+                                point(cfg.gradientStart), point(cfg.gradientEnd))
+                        : Component.translatable("text.texturebuilder.gradient.points.unclear",
+                                point(cfg.gradientStart), point(cfg.gradientEnd), tie))
+                        .withStyle(ChatFormatting.RED);
+            }
             case VALID -> Component.translatable("text.texturebuilder.gradient.points.valid",
                     point(cfg.gradientStart), point(cfg.gradientEnd),
                     GradientHelper.axisName(axis(cfg))).withStyle(ChatFormatting.GREEN);
@@ -263,5 +276,43 @@ public final class GradientController {
 
     private static String point(int[] p) {
         return p[0] + " " + p[1] + " " + p[2];
+    }
+
+    /**
+     * HUD message for points with no single longest axis: "Gradient axis unclear: X and Z both
+     * differ by 12 blocks" for a tie, or "Gradient start and end are the same" when the same block
+     * was picked twice (the only case where that wording is accurate).
+     */
+    private static MutableComponent noAxisMessage(ModConfig cfg) {
+        MutableComponent tie = tieDetail(cfg);
+        return tie == null
+                ? Component.translatable("message.texturebuilder.gradient.same")
+                : Component.translatable("message.texturebuilder.gradient.unclear", tie);
+    }
+
+    /**
+     * "X and Z both differ by 12 blocks" or "X, Y and Z all differ by 12 blocks" for tied points,
+     * or {@code null} when the points are identical (or either is unset).
+     */
+    private static MutableComponent tieDetail(ModConfig cfg) {
+        int[] s = cfg.gradientStart;
+        int[] e = cfg.gradientEnd;
+        if (s == null || e == null) {
+            return null;
+        }
+        int mask = GradientHelper.tiedAxes(s[0], s[1], s[2], e[0], e[1], e[2]);
+        if (mask == 0) {
+            return null;
+        }
+        long blocks = GradientHelper.largestDifference(s[0], s[1], s[2], e[0], e[1], e[2]);
+        Component distance = blocks == 1
+                ? Component.translatable("text.texturebuilder.gradient.distance.one")
+                : Component.translatable("text.texturebuilder.gradient.distance.many", blocks);
+        if (Integer.bitCount(mask) == 3) {
+            return Component.translatable("text.texturebuilder.gradient.tie.all", distance);
+        }
+        String first = (mask & GradientHelper.MASK_X) != 0 ? "X" : "Y";
+        String second = (mask & GradientHelper.MASK_Z) != 0 ? "Z" : "Y";
+        return Component.translatable("text.texturebuilder.gradient.tie.two", first, second, distance);
     }
 }
