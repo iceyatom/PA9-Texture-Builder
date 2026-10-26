@@ -4,11 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.yourname.texturebuilder.TextureBuilder;
+import com.yourname.texturebuilder.TextureBuilderClient;
 import com.yourname.texturebuilder.config.ModConfig;
+import com.yourname.texturebuilder.placement.GradientController;
+import com.yourname.texturebuilder.util.GradientHelper;
 import com.yourname.texturebuilder.util.TextureBuilderHelper;
 import com.yourname.texturebuilder.util.TextureBuilderHelper.SlotEntry;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -17,6 +22,7 @@ import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
+import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -25,30 +31,74 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * The PA9 TextureBuilder configuration screen (FR-06..FR-10, SRS §7.3): one row per hotbar slot
- * with a live preview of the item currently in that slot, an include/exclude toggle, and a weight
- * slider, plus the running weight total (flagged red when it isn't 100 — the screen can still be
- * closed regardless, since selection normalizes proportionally at runtime, FR-09).
+ * The PA9 TextureBuilder configuration screen (FR-06..FR-10, SRS §7.3). One screen serves both
+ * modes; the Mode button in the footer switches mode and rebuilds the contents in place.
  *
- * <p>Built from vanilla widgets only — no Cloth Config / YACL — mirroring the author's other 26.2
- * config screens. The item preview is the slot's current item <em>name</em>, refreshed every tick
- * (kept from the 26.x release, whose render model exposed no simple item-icon draw call).
+ * <ul>
+ *   <li><b>Texture mode</b> (unchanged from v1.0): one row per hotbar slot with a live preview of
+ *       the item in it, an include/exclude toggle and a weight slider, plus the running weight
+ *       total (red when it isn't 100; the screen still closes, since selection normalizes at
+ *       runtime, FR-09).</li>
+ *   <li><b>Gradient mode</b>: the same Slot / Item / Included columns (Gradient mode keeps its own
+ *       Included flags), without the weight columns. Where the total line was: the multi-handle
+ *       {@link GradientDistributionSlider}, the Transition slider with "Clear points", and a
+ *       read-only line with the current points and axis. Included slots run from the start point
+ *       to the end point in hotbar order.</li>
+ * </ul>
+ *
+ * <p>Built from vanilla widgets only (apart from the distribution slider), mirroring the author's
+ * other 26.x config screens. The item preview is the slot's current item <em>name</em>, refreshed
+ * every tick.
  *
  * <p>Edits apply to the live config immediately (FR-10); the TOML is written when the screen
- * closes, by any route (Done, ESC, or the back control). A parent screen (the inventory) is
- * restored on close (FR-06); a {@code null} parent closes to the game.
+ * closes, by any route (Done, ESC, or the back control), and at once when "Clear points" is
+ * pressed. A parent screen (the inventory) is restored on close (FR-06); a {@code null} parent
+ * closes to the game.
  */
 public class TextureBuilderConfigScreen extends Screen {
 
     private static final int ROW_HEIGHT = 16;
-    // Column widths total 294px + 8px of grid spacing = 302px, which still fits the 320px minimum
-    // scaled GUI width Minecraft guarantees. The weight column is 100px so the slider maps almost
-    // exactly one pixel per weight unit across its 0-100 range.
-    private static final int COL_SLOT = 30;
-    private static final int COL_ITEM = 96;
-    private static final int COL_INCLUDE = 34;
+    private static final int BUTTON_HEIGHT = 20;
+
+    // Explicit column widths, shared by both modes so their tables have the same footprint. These
+    // reproduce the Texture screen as it has always rendered (~343px): it used to ask for 302px,
+    // but its full-width total line sat inside the grid, and GridLayout widens narrow columns to
+    // share a spanning child's width (Slot 30 -> 58, Included 46 -> 59). Nothing spans the grid
+    // now; full-width rows sit in a vertical layout below it, so these are the real widths.
+    // 343px fits any GUI at least 343 wide (1080p at scale 4 is 480), but not the 320px minimum.
+    // Eff. % is 40 (was 34 + slack) so the Texture-mode Reset button fits under it.
+    private static final int COL_SLOT = 58;
+    private static final int COL_ITEM = 84;
+    private static final int COL_INCLUDE = 53;
+    private static final int INCLUDE_BUTTON_WIDTH = 46;
     private static final int COL_WEIGHT = 100;
-    private static final int COL_EFFECTIVE = 34;
+    private static final int COL_EFFECTIVE = 40;
+    private static final int GRID_SPACING = 2;
+    private static final int ROW_WIDTH =
+            COL_SLOT + COL_ITEM + COL_INCLUDE + COL_WEIGHT + COL_EFFECTIVE + 4 * GRID_SPACING; // 343
+
+    // Both modes share one header/footer height so the title sits at the same place in each.
+    // 28/28 leaves room for Gradient mode's extra rows in a 270px-tall GUI (1080p at GUI scale 4).
+    private static final int HEADER_HEIGHT = 28;
+    private static final int FOOTER_HEIGHT = 28;
+
+    // Gradient mode: Slot / Item / Included / Eff. % = 58 + 186 + 53 + 40 + 3x2 spacing = 343px, the
+    // same width as Texture mode (Item takes the Weight column's space). Rows are 14px so the table,
+    // the two slider rows and the points line total 214px of content.
+    private static final int GRADIENT_ROW_HEIGHT = 14;
+    private static final int GRADIENT_COL_SLOT = COL_SLOT;
+    private static final int GRADIENT_COL_ITEM =
+            ROW_WIDTH - GRADIENT_COL_SLOT - COL_INCLUDE - COL_EFFECTIVE - 3 * GRID_SPACING;
+    private static final int POINTS_LINE_HEIGHT = 10;
+    // The Reset and Clear points buttons sit under the Included + Eff. % columns, so the bar and
+    // the Transition slider end exactly where the Item column does.
+    private static final int SIDE_BUTTON_WIDTH = COL_INCLUDE + GRID_SPACING + COL_EFFECTIVE;
+    private static final int BAR_WIDTH = ROW_WIDTH - GRID_SPACING - SIDE_BUTTON_WIDTH;
+    // Transition row: [Transition 162][Gradient: 1D/2D/3D 82][Clear points 95] = 343 with spacing.
+    private static final int SHAPE_BUTTON_WIDTH = 82;
+    private static final int TRANSITION_WIDTH = BAR_WIDTH - GRID_SPACING - SHAPE_BUTTON_WIDTH;
+
+    private static final int FOOTER_BUTTON_WIDTH = 120;
 
     private final Screen parent;
 
@@ -60,6 +110,13 @@ public class TextureBuilderConfigScreen extends Screen {
     private final StringWidget[] itemNames = new StringWidget[TextureBuilder.HOTBAR_SIZE];
     private final StringWidget[] effectivePercents = new StringWidget[TextureBuilder.HOTBAR_SIZE];
     private StringWidget totalWidget;
+    private StringWidget pointsLine;
+    /** Whether the current widgets are the Gradient layout (decides what the Eff. % column shows). */
+    private boolean gradientLayout;
+    /** Set by the Mode button; the rebuild runs on the next tick, outside the click handler. */
+    private boolean rebuildPending;
+    /** The current contents (Texture or Gradient table), positioned in {@link #repositionElements()}. */
+    private LinearStack contentsLayout;
 
     public TextureBuilderConfigScreen(Screen parent) {
         super(Component.translatable("text.texturebuilder.config.title"));
@@ -68,29 +125,65 @@ public class TextureBuilderConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        ModConfig config = ModConfig.get();
-        this.layout = new HeaderAndFooterLayout(this);
+        java.util.Arrays.fill(itemNames, null);
+        java.util.Arrays.fill(effectivePercents, null);
+        totalWidget = null;
+        pointsLine = null;
+
+        boolean gradient = ModConfig.get().mode == ModConfig.Mode.GRADIENT;
+        gradientLayout = gradient;
+        this.layout = new HeaderAndFooterLayout(this, HEADER_HEIGHT, FOOTER_HEIGHT);
         this.layout.addToHeader(new StringWidget(this.title, this.font));
 
-        GridLayout grid = new GridLayout().spacing(2);
+        if (gradient) {
+            contentsLayout = this.layout.addToContents(buildGradientContents());
+        } else {
+            contentsLayout = this.layout.addToContents(buildTextureContents());
+        }
+
+        // Footer: Mode + Done only (120 + 120 + 8 = 248px).
+        LinearStack footer = this.layout.addToFooter(LinearStack.horizontal().spacing(8));
+        footer.addChild(modeButton(FOOTER_BUTTON_WIDTH, BUTTON_HEIGHT));
+        footer.addChild(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(FOOTER_BUTTON_WIDTH).build());
+
+        this.layout.visitWidgets(this::addRenderableWidget);
+        this.repositionElements();
+        refreshDerived();
+        refreshGradientShares();
+        refreshItemNames();
+        refreshPoints();
+    }
+
+    /**
+     * Texture mode: Slot / Item / Included / Weight / Eff. % rows, then the weight total with a
+     * Reset button under the Eff. % column (below the grid, so it can't stretch the columns).
+     */
+    private LinearStack buildTextureContents() {
+        ModConfig config = ModConfig.get();
+        LinearStack contents = LinearStack.vertical().spacing(GRID_SPACING);
+        GridLayout grid = new GridLayout().spacing(GRID_SPACING);
         GridLayout.RowHelper rows = grid.createRowHelper(5);
 
-        rows.addChild(header("slot", COL_SLOT));
-        rows.addChild(header("item", COL_ITEM));
-        rows.addChild(header("included", COL_INCLUDE));
-        rows.addChild(header("weight", COL_WEIGHT));
-        rows.addChild(header("effective", COL_EFFECTIVE));
+        rows.addChild(header("slot", COL_SLOT, ROW_HEIGHT));
+        rows.addChild(header("item", COL_ITEM, ROW_HEIGHT));
+        rows.addChild(header("included", COL_INCLUDE, ROW_HEIGHT));
+        rows.addChild(header("weight", COL_WEIGHT, ROW_HEIGHT));
+        rows.addChild(header("effective", COL_EFFECTIVE, ROW_HEIGHT));
 
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
             final int slot = i;
 
-            rows.addChild(new StringWidget(COL_SLOT, ROW_HEIGHT,
-                    Component.translatable("text.texturebuilder.config.slot", slot + 1), this.font));
+            rows.addChild(slotLabel(slot, COL_SLOT, ROW_HEIGHT));
 
             itemNames[i] = new StringWidget(COL_ITEM, ROW_HEIGHT, Component.empty(), this.font);
             rows.addChild(itemNames[i]);
 
-            rows.addChild(includedToggle(config, slot));
+            rows.addChild(includedToggle(config.included[slot], ROW_HEIGHT,
+                    "text.texturebuilder.config.included",
+                    value -> {
+                        config.included[slot] = value; // FR-10: applies immediately.
+                        refreshDerived();
+                    }));
 
             rows.addChild(new WeightSlider(slot, config.weights[slot]));
 
@@ -98,32 +191,131 @@ public class TextureBuilderConfigScreen extends Screen {
             rows.addChild(effectivePercents[i]);
         }
 
-        totalWidget = new StringWidget(
-                COL_SLOT + COL_ITEM + COL_INCLUDE + COL_WEIGHT + COL_EFFECTIVE + 8, ROW_HEIGHT,
+        contents.addChild(grid);
+
+        LinearStack totalRow = LinearStack.horizontal().spacing(GRID_SPACING);
+        totalWidget = new StringWidget(ROW_WIDTH - GRID_SPACING - COL_EFFECTIVE, ROW_HEIGHT,
                 Component.empty(), this.font);
-        rows.addChild(totalWidget, 5);
+        totalRow.addChild(totalWidget);
+        Button reset = Button.builder(Component.translatable("text.texturebuilder.config.reset_weights"), b -> {
+            java.util.Arrays.fill(ModConfig.get().weights, ModConfig.DEFAULT_WEIGHT); // Applies immediately.
+            rebuildPending = true; // Rebuild next tick so every slider shows the new value.
+        }).size(COL_EFFECTIVE, ROW_HEIGHT).build();
+        reset.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.config.reset_weights.tooltip")));
+        totalRow.addChild(reset);
+        contents.addChild(totalRow);
+        return contents;
+    }
 
-        this.layout.addToContents(grid);
+    /**
+     * Gradient mode: Slot / Item / Included / Eff. % rows (Gradient mode's own Included flags;
+     * Eff. % is each slot's share of the start→end line), then the distribution bar + Reset,
+     * Transition + Clear points, and the points/axis line in place of the weight total.
+     *
+     * <p>The full-width rows sit in a vertical layout <em>below</em> the grid, not inside it:
+     * {@link GridLayout} splits a spanning child's width evenly over the spanned columns and widens
+     * narrow columns to match, which pushed the Included column out past the bar's right edge.
+     */
+    private LinearStack buildGradientContents() {
+        ModConfig config = ModConfig.get();
+        LinearStack contents = LinearStack.vertical().spacing(GRID_SPACING);
 
-        this.layout.addToFooter(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(120).build());
+        GridLayout grid = new GridLayout().spacing(GRID_SPACING);
+        GridLayout.RowHelper rows = grid.createRowHelper(4);
 
-        this.layout.visitWidgets(this::addRenderableWidget);
-        this.repositionElements();
-        refreshDerived();
-        refreshItemNames();
+        rows.addChild(header("slot", GRADIENT_COL_SLOT, GRADIENT_ROW_HEIGHT));
+        rows.addChild(header("item", GRADIENT_COL_ITEM, GRADIENT_ROW_HEIGHT));
+        rows.addChild(header("included", COL_INCLUDE, GRADIENT_ROW_HEIGHT));
+        rows.addChild(header("effective", COL_EFFECTIVE, GRADIENT_ROW_HEIGHT));
+
+        for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
+            final int slot = i;
+            rows.addChild(slotLabel(slot, GRADIENT_COL_SLOT, GRADIENT_ROW_HEIGHT));
+
+            itemNames[i] = new StringWidget(GRADIENT_COL_ITEM, GRADIENT_ROW_HEIGHT, Component.empty(), this.font);
+            rows.addChild(itemNames[i]);
+
+            AbstractWidget toggle = includedToggle(config.gradientIncluded[slot], GRADIENT_ROW_HEIGHT,
+                    "text.texturebuilder.config.included",
+                    value -> {
+                        // Applies immediately; the handles redistribute because the count changed.
+                        ModConfig.get().setGradientIncluded(slot, value);
+                        refreshGradientShares();
+                    });
+            toggle.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.included.tooltip")));
+            rows.addChild(toggle);
+
+            effectivePercents[i] = new StringWidget(COL_EFFECTIVE, GRADIENT_ROW_HEIGHT, Component.empty(), this.font);
+            rows.addChild(effectivePercents[i]);
+        }
+        contents.addChild(grid);
+
+        LinearStack barRow = LinearStack.horizontal().spacing(GRID_SPACING);
+        GradientDistributionSlider distribution = new GradientDistributionSlider(BAR_WIDTH, BUTTON_HEIGHT,
+                this.font, this::gradientEntryName, this::refreshGradientShares);
+        distribution.setTooltip(Tooltip.create(
+                Component.translatable("text.texturebuilder.gradient.distribution.tooltip")));
+        barRow.addChild(distribution);
+        Button reset = Button.builder(Component.translatable("text.texturebuilder.gradient.reset"), b -> {
+            ModConfig cfg = ModConfig.get();
+            int entries = cfg.gradientPalette().length;
+            if (entries >= 2) {
+                cfg.gradientBoundaries = GradientHelper.evenBoundaries(entries); // Applies immediately.
+            }
+            refreshGradientShares();
+        }).size(SIDE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
+        reset.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.reset.tooltip")));
+        barRow.addChild(reset);
+        contents.addChild(barRow);
+
+        LinearStack transitionRow = LinearStack.horizontal().spacing(GRID_SPACING);
+        transitionRow.addChild(new TransitionSlider(config.gradientTransition));
+        transitionRow.addChild(shapeButton(config.gradientShape));
+        transitionRow.addChild(Button.builder(Component.translatable("text.texturebuilder.gradient.clear_points"),
+                b -> {
+                    ModConfig.get().clearGradientPoints();
+                    ModConfig.get().save(); // Points always save when they change.
+                    refreshPoints();
+                }).size(SIDE_BUTTON_WIDTH, BUTTON_HEIGHT).build());
+        contents.addChild(transitionRow);
+
+        pointsLine = new ScrollingStringWidget(ROW_WIDTH, POINTS_LINE_HEIGHT, Component.empty(), this.font);
+        contents.addChild(pointsLine);
+        return contents;
+    }
+
+    /**
+     * Before 1.20.2, {@code Screen.render} doesn't draw the dimmed background itself (1.20.2+ and
+     * 26.x do), so draw it first, as vanilla screens of this version do.
+     */
+    @Override
+    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(poseStack);
+        super.render(poseStack, mouseX, mouseY, partialTick);
     }
 
     @Override
     protected void repositionElements() {
         if (this.layout != null) {
             this.layout.arrangeElements();
+            if (contentsLayout != null) {
+                // 1.20.2+'s rule: 30px under the header, or higher if the contents would
+                // otherwise overlap the footer (this version's layout always uses the 30px).
+                contentsLayout.setY(Math.min(this.layout.getHeaderHeight() + 30,
+                        this.height - this.layout.getFooterHeight() - contentsLayout.getHeight()));
+            }
         }
     }
 
-    /** FR-07 live preview + FR-09 running total, refreshed every tick. */
+    /** FR-07 live preview, plus the gradient points line; refreshed every tick. */
     @Override
     public void tick() {
+        if (rebuildPending) {
+            rebuildPending = false;
+            this.rebuildWidgets();
+        }
         refreshItemNames();
+        refreshPoints();
     }
 
     /** Any close route persists the (already live) edits to the TOML and returns to the parent (FR-06/FR-10). */
@@ -150,13 +342,38 @@ public class TextureBuilderConfigScreen extends Screen {
         }
     }
 
+    private void refreshPoints() {
+        if (pointsLine != null && this.minecraft != null) {
+            pointsLine.setMessage(GradientController.describePoints(this.minecraft));
+        }
+    }
+
+    /** Segment label for gradient entry {@code entry}: the live name of its slot's item. */
+    private Component gradientEntryName(int entry) {
+        int[] palette = ModConfig.get().gradientPalette();
+        if (entry >= palette.length) {
+            return Component.empty();
+        }
+        if (this.minecraft == null || this.minecraft.player == null) {
+            return Component.translatable("text.texturebuilder.config.slot", palette[entry] + 1);
+        }
+        ItemStack stack = this.minecraft.player.getInventory().getItem(palette[entry]);
+        return stack.isEmpty()
+                ? Component.translatable("text.texturebuilder.config.empty")
+                : stack.getHoverName();
+    }
+
     /**
      * Recomputes the FR-09 total (red when not 100) and the normalized effective percentages.
+     * Texture mode only; a no-op in Gradient mode, where those widgets don't exist.
      *
      * <p>Null-guarded throughout: widgets are built row by row in {@link #init()}, so a slider can
      * exist before the label widgets this method writes to.
      */
     private void refreshDerived() {
+        if (gradientLayout) {
+            return; // Gradient mode's Eff. % column is filled by refreshGradientShares().
+        }
         ModConfig config = ModConfig.get();
         List<SlotEntry> entries = new ArrayList<>(TextureBuilder.HOTBAR_SIZE);
         for (int i = 0; i < TextureBuilder.HOTBAR_SIZE; i++) {
@@ -183,6 +400,41 @@ public class TextureBuilderConfigScreen extends Screen {
                         : Component.literal(String.format("%.1f%%", pct)));
             } else {
                 effectivePercents[i].setMessage(Component.empty());
+            }
+        }
+    }
+
+    /**
+     * Gradient mode's Eff. % column: each included slot's share of the start→end line, from the
+     * distribution handles. Blend zones are symmetric around each boundary, so this is also the
+     * expected share of placed blocks along the line. "—" for excluded slots, and for every slot
+     * while fewer than 2 are included (no gradient). Blank when {@code auto_normalize_display} is
+     * off, like Texture mode's column.
+     */
+    private void refreshGradientShares() {
+        if (!gradientLayout) {
+            return;
+        }
+        ModConfig config = ModConfig.get();
+        int[] palette = config.gradientPalette();
+        boolean usable = palette.length >= GradientHelper.MIN_ENTRIES
+                && config.gradientBoundaries.length == palette.length - 1;
+        Component blank = config.autoNormalizeDisplay
+                ? Component.literal("—").withStyle(ChatFormatting.DARK_GRAY)
+                : Component.empty();
+        for (StringWidget widget : effectivePercents) {
+            if (widget != null) {
+                widget.setMessage(blank);
+            }
+        }
+        if (!config.autoNormalizeDisplay || !usable) {
+            return;
+        }
+        for (int entry = 0; entry < palette.length; entry++) {
+            StringWidget widget = effectivePercents[palette[entry]];
+            if (widget != null) {
+                double pct = GradientHelper.segmentShare(config.gradientBoundaries, entry) * 100.0D;
+                widget.setMessage(Component.literal(String.format("%.1f%%", pct)));
             }
         }
     }
@@ -234,30 +486,150 @@ public class TextureBuilderConfigScreen extends Screen {
         return Mth.clamp((double) (weight - ModConfig.WEIGHT_MIN) / span, 0.0D, 1.0D);
     }
 
+    /** Gradient mode's global blend width, 0-100%, written straight to the live config. */
+    private static class TransitionSlider extends AbstractSliderButton {
+        TransitionSlider(int transition) {
+            super(0, 0, TRANSITION_WIDTH, BUTTON_HEIGHT, Component.empty(),
+                    Mth.clamp(transition / (double) ModConfig.TRANSITION_MAX, 0.0D, 1.0D));
+            this.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.transition.tooltip")));
+            this.updateMessage();
+        }
+
+        private int percent() {
+            return Mth.floor(this.value * ModConfig.TRANSITION_MAX + 0.5D);
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Component.translatable("text.texturebuilder.gradient.transition", percent()));
+        }
+
+        @Override
+        protected void applyValue() {
+            ModConfig.get().gradientTransition = percent();
+        }
+    }
+
     /**
-     * The per-slot Included/Excluded toggle (FR-08). Built from the generic {@link CycleButton}
-     * factory rather than {@link CycleButton#onOffBuilder} so the ON/OFF label can be colored —
-     * malilib's SUCCESS/ERROR convention (green {@code §a} / red {@code §c}, confirmed from the
-     * installed malilib jar's lang file), matching the toggle hotkey's confirmation message and
-     * Litematica's own toggle messages, since Litematica is built on malilib.
+     * A per-slot Included/Excluded toggle (FR-08), used by both modes with their own flags. Built
+     * from the generic {@link CycleButton} factory rather than {@link CycleButton#onOffBuilder} so
+     * the ON/OFF label can be colored — malilib's SUCCESS/ERROR convention (green {@code §a} / red
+     * {@code §c}, confirmed from the installed malilib jar's lang file), matching the toggle
+     * hotkey's confirmation message and Litematica's own toggle messages, since Litematica is built
+     * on malilib.
      */
-    private AbstractWidget includedToggle(ModConfig config, int slot) {
+    private static AbstractWidget includedToggle(boolean initial, int height, String narrationKey,
+                                                 java.util.function.Consumer<Boolean> onChange) {
         return CycleButton.<Boolean>builder(
                         value -> Component.translatable(value ? "text.texturebuilder.on" : "text.texturebuilder.off")
                                 .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED))
                 .withValues(true, false)
-                .withInitialValue(config.included[slot])
+                .withInitialValue(initial)
                 .displayOnlyValue()
-                .create(0, 0, COL_INCLUDE, ROW_HEIGHT,
-                        Component.translatable("text.texturebuilder.config.included"),
-                        (button, value) -> {
-                            config.included[slot] = value; // FR-10: applies immediately.
-                            refreshDerived();
-                        });
+                .create(0, 0, INCLUDE_BUTTON_WIDTH, height, Component.translatable(narrationKey),
+                        (button, value) -> onChange.accept(value));
     }
 
-    private StringWidget header(String key, int width) {
-        return new StringWidget(width, ROW_HEIGHT,
+    /**
+     * The 1D / 2D / 3D gradient shape button: which axes the fade runs across. Applies to the live
+     * config at once; the points line below refreshes every tick, so it re-checks the points for
+     * the new shape straight away.
+     */
+    private static CycleButton<Integer> shapeButton(int shape) {
+        CycleButton<Integer> button = CycleButton.<Integer>builder(
+                        value -> Component.translatable("text.texturebuilder.gradient.shape." + value))
+                .withValues(1, 2, 3)
+                .withInitialValue(shape)
+                .create(0, 0, SHAPE_BUTTON_WIDTH, BUTTON_HEIGHT,
+                        Component.translatable("text.texturebuilder.gradient.shape"),
+                        (b, value) -> ModConfig.get().gradientShape = value);
+        button.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.gradient.shape.tooltip")));
+        return button;
+    }
+
+    /**
+     * The Texture/Gradient mode button in the footer, the only way to change the mode. A change
+     * applies to the live config at once and the screen swaps its contents on the next tick.
+     */
+    private CycleButton<ModConfig.Mode> modeButton(int width, int height) {
+        CycleButton<ModConfig.Mode> button = CycleButton.<ModConfig.Mode>builder(
+                        TextureBuilderClient::modeName)
+                .withValues(ModConfig.Mode.values())
+                .withInitialValue(ModConfig.get().mode)
+                .create(0, 0, width, height, Component.translatable("text.texturebuilder.config.mode"),
+                        (b, mode) -> {
+                            ModConfig.get().mode = mode; // Applies immediately.
+                            rebuildPending = true;
+                        });
+        button.setTooltip(Tooltip.create(Component.translatable("text.texturebuilder.config.mode.tooltip")));
+        return button;
+    }
+
+    /**
+     * Stand-in for 1.20.2+'s {@code LinearLayout.vertical()} / {@code horizontal()} with
+     * {@code spacing(n)}: a one-column or one-row {@link GridLayout} with the same gaps, children
+     * placed in the order they are added. This version's {@code LinearLayout} has no spacing and
+     * spreads its children over a fixed size instead.
+     */
+    private static final class LinearStack extends GridLayout {
+        private final boolean vertical;
+        private int count;
+
+        private LinearStack(boolean vertical) {
+            this.vertical = vertical;
+        }
+
+        static LinearStack vertical() {
+            return new LinearStack(true);
+        }
+
+        static LinearStack horizontal() {
+            return new LinearStack(false);
+        }
+
+        @Override
+        public LinearStack spacing(int spacing) {
+            super.spacing(spacing);
+            return this;
+        }
+
+        <T extends LayoutElement> T addChild(T child) {
+            int index = count++;
+            return addChild(child, vertical ? index : 0, vertical ? 0 : index);
+        }
+    }
+
+    /**
+     * The points line: left-aligned text that scrolls when it is wider than the line. This is what
+     * {@code StringWidget.setMaxWidth(width, TextOverflow.SCROLLING)} does on 1.21.9+ (same text
+     * position, same 2px scroll margin); this version's {@code StringWidget} has no overflow mode
+     * and would centre the text and cut it off instead.
+     */
+    private static class ScrollingStringWidget extends StringWidget {
+        ScrollingStringWidget(int width, int height, Component message, Font font) {
+            super(width, height, message, font);
+        }
+
+        @Override
+        public void renderWidget(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+            Component message = getMessage();
+            Font font = getFont();
+            if (font.width(message) > getWidth()) {
+                renderScrollingString(poseStack, font, 2, getColor());
+            } else {
+                font.drawShadow(poseStack, message.getVisualOrderText(), getX(),
+                        getY() + (getHeight() - font.lineHeight) / 2, getColor());
+            }
+        }
+    }
+
+    private StringWidget slotLabel(int slot, int width, int height) {
+        return new StringWidget(width, height,
+                Component.translatable("text.texturebuilder.config.slot", slot + 1), this.font);
+    }
+
+    private StringWidget header(String key, int width, int height) {
+        return new StringWidget(width, height,
                 Component.translatable("text.texturebuilder.config.header." + key)
                         .withStyle(ChatFormatting.UNDERLINE),
                 this.font);
