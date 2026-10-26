@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.yourname.texturebuilder.command.TextureBuilderCommands;
 import com.yourname.texturebuilder.config.ModConfig;
 import com.yourname.texturebuilder.hud.TextureBuilderHud;
+import com.yourname.texturebuilder.placement.GradientController;
 import com.yourname.texturebuilder.placement.PlacementRandomizer;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -31,6 +32,7 @@ import net.minecraft.network.chat.Component;
 public class TextureBuilderClient implements ClientModInitializer {
 
     private static KeyMapping toggleKey;
+    private static KeyMapping gradientPointKey;
     /** Session ON/OFF state (FR-03: session-only; seeded from the config's `enabled` at launch). */
     private static boolean active;
     /** NFR-04 kill switch: set after an unexpected exception; stays set for the session. */
@@ -54,9 +56,18 @@ public class TextureBuilderClient implements ClientModInitializer {
             return;
         }
         active = !active;
+        // "ON (Gradient)" / "OFF (Texture)": the state and the active mode go into the toggle
+        // message's %s as one colored Component, so the whole phrase is green or red.
         TextureBuilderHud.showMessage(Component.translatable("message.texturebuilder.toggle",
-                Component.translatable(active ? "text.texturebuilder.on" : "text.texturebuilder.off")
+                Component.translatable("text.texturebuilder.toggle_state",
+                                Component.translatable(active ? "text.texturebuilder.on" : "text.texturebuilder.off"),
+                                modeName(ModConfig.get().mode))
                         .withStyle(active ? ChatFormatting.GREEN : ChatFormatting.RED)));
+    }
+
+    /** "Texture" / "Gradient", for the toggle message, status and the config screen's mode button. */
+    public static Component modeName(ModConfig.Mode mode) {
+        return Component.translatable("text.texturebuilder.mode." + mode.id());
     }
 
     /**
@@ -80,6 +91,10 @@ public class TextureBuilderClient implements ClientModInitializer {
         // Use Minecraft's own "unbound" sentinel (GLFW -1 on 1.21.1) rather than a literal.
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.texturebuilder.toggle", InputConstants.UNKNOWN.getValue(), "key.categories.gameplay"));
+        // Gradient mode: start / end / clear cycle on the block under the crosshair. Unbound by
+        // default, like the toggle. Mode switching has no keybind (config screen button only).
+        gradientPointKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.texturebuilder.gradient_point", InputConstants.UNKNOWN.getValue(), "key.categories.gameplay"));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 TextureBuilderCommands.register(dispatcher));
@@ -91,6 +106,9 @@ public class TextureBuilderClient implements ClientModInitializer {
             }
             while (toggleKey.consumeClick()) {
                 toggle(); // FR-01: works in-game regardless of any GUI being open.
+            }
+            while (gradientPointKey.consumeClick()) {
+                GradientController.onSetPointPressed(client);
             }
             // Settles any in-flight pick-block restock (FR-13..FR-15), which resolves a tick or
             // more after the keypress is queued.
