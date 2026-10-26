@@ -101,12 +101,17 @@ public final class PlacementRandomizer {
     /**
      * HEAD of {@code useItemOn}: weighted-select and switch. Does nothing while toggled OFF
      * (FR-04, NFR-02) or for off-hand interactions.
+     *
+     * @return {@code true} to cancel the interaction: Gradient mode with unusable points (none,
+     *         start only, another dimension, or start and end the same) blocks placement and shows
+     *         a warning instead of falling back to Texture mode's mix (user's choice, 2026-10-25).
+     *         Cancelling at HEAD means no packet is sent, so the server places nothing either.
      */
-    public static void beforePlacement(LocalPlayer player, InteractionHand hand, BlockHitResult hit) {
+    public static boolean beforePlacement(LocalPlayer player, InteractionHand hand, BlockHitResult hit) {
         try {
             if (!TextureBuilderClient.isOn() || hand != InteractionHand.MAIN_HAND
                     || player == null || pending != null) {
-                return;
+                return false;
             }
             Minecraft client = Minecraft.getInstance();
             Inventory inventory = player.getInventory();
@@ -116,12 +121,26 @@ public final class PlacementRandomizer {
             // block. Tools, food, buckets etc. keep fully vanilla behaviour even while toggled ON.
             ItemStack held = inventory.getItem(originalSlot);
             if (!held.isEmpty() && !(held.getItem() instanceof BlockItem)) {
-                return;
+                return false;
             }
 
-            int pick = TextureBuilderHelper.selectSlot(poolEntries(), RANDOM);
+            // Gradient mode picks by the placed block's position. Unusable points or fewer than 2
+            // included slots block the placement outright (see blockGradientPlacement). Only this
+            // choice differs between modes; the guards above and the restock/restore below are
+            // shared. The pool fallback after selectSlot is only a safety net now.
+            int pick = -1;
+            if (ModConfig.get().mode == ModConfig.Mode.GRADIENT) {
+                Component blocked = GradientController.blockedReason(client);
+                if (blocked != null) {
+                    return blockGradientPlacement(client, player, held, hit, blocked);
+                }
+                pick = GradientController.selectSlot(client, hit, RANDOM);
+            }
             if (pick < 0) {
-                return; // nothing included / all weights zero — leave placement alone.
+                pick = TextureBuilderHelper.selectSlot(poolEntries(), RANDOM);
+            }
+            if (pick < 0) {
+                return false; // nothing included / all weights zero — leave placement alone.
             }
 
             ItemStack pickStack = inventory.getItem(pick);
@@ -137,6 +156,34 @@ public final class PlacementRandomizer {
             pending = null;
             TextureBuilderClient.failSession(e);
         }
+        return false;
+    }
+
+    /**
+     * Gradient placement can't run here. If the clicked block has its own right-click action
+     * (chest, door, button...) and vanilla would use it (not sneaking with an item in hand), the
+     * click goes through untouched: no slot switch, and vanilla runs the block's action instead of
+     * placing. Otherwise the click is cancelled and the warning is shown.
+     *
+     * <p>This has to be decided before vanilla runs: the client sends one use-item-on packet and
+     * the server does both the block action and the placement from it, so the only way to stop the
+     * placement is not to send the packet at all.
+     *
+     * @return whether to cancel the interaction
+     */
+    private static boolean blockGradientPlacement(Minecraft client, LocalPlayer player, ItemStack held,
+                                                  BlockHitResult hit, Component reason) {
+        boolean handsEmpty = held.isEmpty() && player.getItemInHand(InteractionHand.OFF_HAND).isEmpty();
+        boolean skipsBlockAction = player.isSecondaryUseActive() && !handsEmpty; // vanilla's own rule
+        if (hit != null && client.level != null && !skipsBlockAction
+                && GradientController.hasUseAction(client.level.getBlockState(hit.getBlockPos()).getBlock())) {
+            return false;
+        }
+        TextureBuilderHud.showMessage(reason);
+        if (ModConfig.get().debugLogging) {
+            TextureBuilder.LOGGER.info("[TextureBuilder] gradient placement blocked: {}", reason.getString());
+        }
+        return true;
     }
 
     /**
