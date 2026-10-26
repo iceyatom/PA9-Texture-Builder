@@ -40,11 +40,21 @@ import net.minecraft.world.phys.BlockHitResult;
 @Mixin(MultiPlayerGameMode.class)
 public abstract class MultiPlayerGameModeMixin {
 
-    @Inject(method = "useItemOn", at = @At("HEAD"))
+    /**
+     * Cancellable since v1.1.0: Gradient mode with unusable points (none, start only, another
+     * dimension, start and end the same) blocks the placement with a warning. Cancelling here, at
+     * HEAD, returns {@code FAIL} before vanilla builds the use-item-on packet, so the server never
+     * hears of the click and places nothing; {@code FAIL} also stops {@code startUseItem} trying
+     * the off hand. TAIL does not run for a cancelled call, which is fine: nothing was switched.
+     * In every other case this still never cancels or alters vanilla logic (PKT-02).
+     */
+    @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
     private void texturebuilder$beforeUseItemOn(LocalPlayer player, InteractionHand hand,
                                                 BlockHitResult hitResult,
                                                 CallbackInfoReturnable<InteractionResult> cir) {
-        PlacementRandomizer.beforePlacement(player, hand, hitResult);
+        if (PlacementRandomizer.beforePlacement(player, hand, hitResult)) {
+            cir.setReturnValue(InteractionResult.FAIL);
+        }
     }
 
     @Inject(method = "useItemOn", at = @At("TAIL"))
